@@ -1,0 +1,22 @@
+[package]
+name = "work-energy"
+version = "0.1.0"
+description = "Work Energy desktop shell"
+edition = "2021"
+rust-version = "1.77.2"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+codegen-units = 16
+lto = false
+opt-level = "s"
+panic = "abort"
+strip = true

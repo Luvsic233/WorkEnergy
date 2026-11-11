@@ -163,3 +163,31 @@ rAF 回调里只做三件事：读 `Date.now()`、算一次纯函数、写三个
 ## 许可
 
 MIT，见 [LICENSE](LICENSE)。Copyright (c) 2026 WorkEnergy contributors。
+
+## 本机工具链（项目内自举，无需管理员权限）
+
+本机没有 Rust、没有管理员权限、MSVC 无法安装，因此 Rust 工具链与 mingw 链接器全部放在项目内的 `.toolchain/`（已在 `.gitignore` 中忽略）：
+
+| 路径 | 内容 | 体积 |
+| --- | --- | --- |
+| `.toolchain/rust/` | rustc 1.92.0 / cargo 1.92.0，host `x86_64-pc-windows-gnu`，LLVM 21.1.3 | 约 830 MB |
+| `.toolchain/msys64/` | 便携 MSYS2 + `mingw-w64-x86_64-gcc` 16.2.0 + binutils 2.47（`x86_64-w64-mingw32-gcc`、`ld`、`ar`、`windres`） | 约 810 MB |
+| `.toolchain/cargo-home/` | `CARGO_HOME`：registry 与 `config.toml`（链接器 + 清华 sparse 源） | |
+| `.toolchain/rctools/` | `windres.exe` 垫片，见下方说明 | |
+| `.toolchain/{tmp,home,rustup-home,dl,logs}/` | TEMP/HOME/RUSTUP_HOME/下载与日志，保证不写 C: 盘 | |
+
+构建前需要的环境（全部指向项目内，不改系统 PATH、不改注册表）：
+
+```bat
+set "TC=E:\WorkEnergy\.toolchain"
+set "PATH=%TC%\rctools;%TC%\rust\bin;%TC%\msys64\mingw64\bin;%TC%\msys64\usr\bin;%PATH%"
+set "CARGO_HOME=%TC%\cargo-home"
+set "RUSTUP_HOME=%TC%\rustup-home"
+set "HOME=%TC%\home"
+set "TEMP=%TC%\tmp"
+set "TMP=%TC%\tmp"
+```
+
+然后 `cd src-tauri && cargo build`（或 `pnpm build && pnpm tauri:build`）。产物：`src-tauri\target\debug\work-energy.exe`。
+
+**windres 垫片（重要，如实记录）**：在本机这台机器上，`tauri-build` → `tauri-winres` → `embed-resource` 调用 `windres` 时稳定报 `windres: preprocessing failed.`（exit 1），而同一条命令在 shell 里手工执行完全正常（`windres --input resource.rc --output out.a --include-dir OUT --output-format=coff --target pe-x86-64 -c 65001` 成功）。已排除：PATH 顺序、`x86_64-w64-mingw32-windres` 名称探测、`RC`/`RC_<target>` 覆盖、cwd、TEMP、参数集（详见提交说明）。因此 `.toolchain/rctools/windres.exe` 是一个垫片：它把预先生成好的资源归档复制到 `--output` 指定路径并返回 0，让构建脚本通过。副作用是 exe 的图标/版本资源固定为模板内容，改动 `tauri.conf.json` 里的图标后需要重新生成 `.toolchain/rctools/libresource.a`。这是本机绕行方案，CI（MSVC）不需要它。
