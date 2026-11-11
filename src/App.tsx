@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { parseSettings } from "./core/earning";
+import { DEFAULT_INPUT, validateInput, type RawInput } from "./core/settings";
+import { localStorageAdapter } from "./settings/storage";
 import { FloatingBar } from "./ui/FloatingBar";
+import { SettingsPanel } from "./ui/SettingsPanel";
 
 const BASE_SETTINGS = parseSettings({ salary: "10000" });
 
@@ -8,7 +11,26 @@ export function App() {
   const [overtimeMode, setOvertimeMode] = useState(false);
   const [demoClock, setDemoClock] = useState(true);
 
-  const settings = useMemo(() => ({ ...BASE_SETTINGS, overtimeMode }), [overtimeMode]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [savedInput, setSavedInput] = useState<RawInput>(DEFAULT_INPUT);
+
+  useEffect(() => {
+    let alive = true;
+    localStorageAdapter
+      .load()
+      .then((stored) => {
+        if (alive && stored) setSavedInput(stored);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const settings = useMemo(
+    () => ({ ...(validateInput(savedInput).settings ?? BASE_SETTINGS), overtimeMode }),
+    [savedInput, overtimeMode],
+  );
 
   const now = useMemo(() => {
     if (!demoClock) return Date.now;
@@ -31,7 +53,18 @@ export function App() {
           <input type="checkbox" checked={demoClock} onChange={(event) => setDemoClock(event.currentTarget.checked)} />
           演示时钟（09:30 起，60×）
         </label>
+        <button type="button" className="settings-open" onClick={() => setSettingsOpen(true)}>
+          打开设置
+        </button>
       </div>
+
+      <SettingsPanel
+        open={settingsOpen}
+        initial={savedInput}
+        adapter={localStorageAdapter}
+        onClose={() => setSettingsOpen(false)}
+        onSaved={setSavedInput}
+      />
     </main>
   );
 }

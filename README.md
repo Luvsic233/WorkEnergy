@@ -2,7 +2,7 @@
 
 一个 Vite + React + TypeScript 的悬浮条：用 BigInt 定点数实时计算"今天已经赚到多少钱"，12 位小数、60fps 只更新文本节点。
 
-当前波次只做前端核心（薪资引擎 + 悬浮条 + 演示页），**不含** Tauri/Rust 外壳、托盘、设置面板、开机自启。
+当前已完成前端核心（薪资引擎 + 悬浮条 + 演示页 + 薪资设置面板），**不含** Tauri/Rust 外壳、托盘、开机自启、真实存储后端。
 
 ## 快速开始
 
@@ -34,6 +34,12 @@ eval $PNPM build
 | `src/ui/ticker.ts` | rAF 循环外壳，注入 `now/schedule/cancel` 以便单测 |
 | `src/ui/FloatingBar.tsx` | 400×120 深色半透明悬浮条，每帧只写 `textContent`，不 `setState` |
 | `src/App.tsx` | 演示页：加班模式 / 演示时钟开关 |
+
+## 持久化适配层
+
+- 输入存在 `localStorage` 的 `workenergy.settings.v1`，读写只经过 `src/settings/storage.ts` 的 `StorageAdapter`（`load()` / `save()`）。
+- 外壳波次会换成 Tauri store / Neutralino storage，只替换该适配器，`settings.ts` 与面板组件不用改一行。
+- 本波次没有第二种后端：拿不到 `localStorage` 时 `load()` 返回 `null`、`save()` 抛错，面板把原因显示在状态行里。
 
 ## 渲染纪律
 

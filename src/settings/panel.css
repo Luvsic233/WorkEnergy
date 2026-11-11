@@ -1,0 +1,220 @@
+/* 设置面板：复用悬浮条的深色半透明语汇（rgba(14,16,22,.62) + blur 18px + 22px 圆角）。 */
+.settings-open {
+  font: inherit;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.86);
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 16, 22, 0.62);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  cursor: pointer;
+}
+
+.settings-open:hover {
+  border-color: rgba(160, 220, 255, 0.42);
+  color: #f2f4f8;
+}
+
+.settings-panel {
+  box-sizing: border-box;
+  width: 400px;
+  padding: 16px 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(14, 16, 22, 0.62);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.28);
+  color: #f2f4f8;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgba(226, 232, 240, 0.72);
+}
+
+.settings-close {
+  border: 0;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.6);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.settings-close:hover {
+  color: #f2f4f8;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.settings-field-label {
+  color: rgba(226, 232, 240, 0.55);
+  letter-spacing: 0.06em;
+}
+
+.settings-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 10, 14, 0.55);
+  color: #f2f4f8;
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: rgba(160, 220, 255, 0.55);
+  box-shadow: 0 0 0 2px rgba(82, 122, 255, 0.18);
+}
+
+.settings-input.is-invalid {
+  border-color: rgba(248, 113, 113, 0.75);
+}
+
+.settings-error {
+  color: #fca5a5;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.settings-hourly {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(82, 122, 255, 0.08);
+  border: 1px solid rgba(160, 220, 255, 0.14);
+}
+
+.settings-hourly-label {
+  color: rgba(226, 232, 240, 0.55);
+}
+
+.settings-hourly-value {
+  color: rgba(160, 220, 255, 0.92);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-hourly-unit {
+  color: rgba(226, 232, 240, 0.45);
+}
+
+.settings-toggle {
+  align-self: flex-start;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: rgba(160, 220, 255, 0.85);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settings-toggle:hover {
+  color: #f2f4f8;
+}
+
+.settings-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(8, 10, 14, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.settings-row {
+  display: flex;
+  gap: 10px;
+}
+
+.settings-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(226, 232, 240, 0.7);
+  cursor: pointer;
+}
+
+.settings-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-status {
+  flex: 1;
+  min-width: 0;
+  color: rgba(226, 232, 240, 0.5);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-btn {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 10, 14, 0.5);
+  color: rgba(226, 232, 240, 0.86);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settings-btn:hover {
+  border-color: rgba(160, 220, 255, 0.4);
+  color: #f2f4f8;
+}
+
+.settings-btn.primary {
+  border-color: rgba(82, 122, 255, 0.55);
+  background: rgba(82, 122, 255, 0.22);
+  color: #eef2ff;
+}
+
+.settings-btn.primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.settings-btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.55);
+}
