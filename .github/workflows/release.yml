@@ -1,0 +1,113 @@
+# WorkEnergy · GitHub Actions 发布流水线（Windows x64）
+#
+# CI 里用官方 rustup + MSVC：windows-latest 自带 VS 生成工具与 Windows SDK。
+# 不要照搬本机 .toolchain 的 gnu 路线，那是为了绕开"装 MSVC 需要管理员权限"这个本机限制。
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# 最小权限；只有下方 release job 单独提升到 contents: write
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # arm64 暂不构建。将来加 aarch64-pc-windows-msvc 时注意两点：
+        # 1) 必须显式传 --target，产物路径会变成 src-tauri/target/<triple>/release/**；
+        # 2) Tauri 2 的 bundler 还需要对应的 NSIS 目标支持。
+        include:
+          - target: x86_64-pc-windows-msvc
+            artifact: workenergy-windows-x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Unit tests (vitest)
+        run: pnpm exec vitest run
+
+      - name: Type-check and build frontend
+        run: pnpm build
+
+      - name: Setup Rust (stable MSVC)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          # 只缓存 src-tauri 这个 crate 的 target 目录（Cargo.lock 在 src-tauri/ 下）
+          workspaces: "src-tauri -> target"
+
+      - name: Install Tauri CLI
+        run: pnpm add -D @tauri-apps/cli@^2
+
+      - name: Build Tauri app
+        # tauri.conf.json 没配 beforeBuildCommand，所以前端 dist/ 必须由上面的步骤产出。
+        # 这里按 host 目标原生产物，产物落在 src-tauri/target/release/**；
+        # 一旦改成 --target <triple>，路径要同步改成 src-tauri/target/<triple>/release/**。
+        run: pnpm exec tauri build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            src-tauri/target/release/*.exe
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: publish GitHub release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.msi
