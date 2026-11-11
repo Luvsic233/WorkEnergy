@@ -26,7 +26,7 @@ describe("DEFAULT_INPUT", () => {
       lunchEnd: "13:00",
       overtimeMode: false,
       decimals: 12,
-      refreshHz: 10,
+      refreshHz: 1,
     });
   });
 
@@ -174,9 +174,9 @@ describe("hourlyAtoms", () => {
 });
 
 describe("display tiers: decimals + refreshHz", () => {
-  it("defaults to 12 digits at 10Hz and offers the tiers in panel order", () => {
+  it("defaults to 12 digits at 1Hz and offers the tiers in panel order", () => {
     expect(DEFAULT_INPUT.decimals).toBe(12);
-    expect(DEFAULT_INPUT.refreshHz).toBe(10);
+    expect(DEFAULT_INPUT.refreshHz).toBe(1);
     expect(DECIMALS_OPTIONS).toEqual([12, 6, 3]);
     expect(REFRESH_HZ_OPTIONS).toEqual([60, 10, 1]);
   });

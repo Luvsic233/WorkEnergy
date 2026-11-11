@@ -85,22 +85,22 @@ describe("storage of the display tiers", () => {
     expect(await adapter.load()).toEqual(saved);
   });
 
-  it("falls back to 12 digits at 10Hz for a legacy record without the new fields", async () => {
+  it("falls back to 12 digits at 1Hz for a legacy record without the new fields", async () => {
     const store = memoryStore();
     store.data.set(STORAGE_KEY, JSON.stringify({ salary: "15000" }));
 
     const loaded = await createAdapter(() => store).load();
 
     expect(loaded?.decimals).toBe(12);
-    expect(loaded?.refreshHz).toBe(10);
+    expect(loaded?.refreshHz).toBe(1);
   });
 
   it("rejects stored tiers that the panel never offers", async () => {
     const adapter = createAdapter(() => memoryStore());
-    expect(normalizeRawInput({ decimals: 5, refreshHz: 30 })).toMatchObject({ decimals: 12, refreshHz: 10 });
-    expect(normalizeRawInput({ decimals: "6", refreshHz: "60" })).toMatchObject({ decimals: 12, refreshHz: 10 });
+    expect(normalizeRawInput({ decimals: 5, refreshHz: 30 })).toMatchObject({ decimals: 12, refreshHz: 1 });
+    expect(normalizeRawInput({ decimals: "6", refreshHz: "60" })).toMatchObject({ decimals: 12, refreshHz: 1 });
     expect(normalizeRawInput({ decimals: 3, refreshHz: 1 })).toMatchObject({ decimals: 3, refreshHz: 1 });
-    expect(parseStored(JSON.stringify({ decimals: 0, refreshHz: 0 }))).toMatchObject({ decimals: 12, refreshHz: 10 });
+    expect(parseStored(JSON.stringify({ decimals: 0, refreshHz: 0 }))).toMatchObject({ decimals: 12, refreshHz: 1 });
     expect(await adapter.load()).toBeNull();
   });
 });

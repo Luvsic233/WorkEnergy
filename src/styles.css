@@ -70,13 +70,6 @@ body {
   color: rgba(160, 220, 255, 0.92);
 }
 
-/* 12 位小数时后 6 位降噪：仍随数值刷新，但退到背景层，让眼睛读整体而不是逐位追。 */
-.bar-value .frac-weak {
-  font-size: 13px;
-  font-weight: 400;
-  opacity: 0.35;
-}
-
 .bar-value .unit {
   margin-left: 4px;
   font-size: 12px;

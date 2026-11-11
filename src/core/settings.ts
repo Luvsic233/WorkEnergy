@@ -23,7 +23,7 @@ export interface RawInput {
   overtimeMode: boolean;
   /** 小数位数：12 位（默认）/ 6 位 / 3 位。 */
   decimals: Decimals;
-  /** DOM 重绘频率档位，默认 10Hz。 */
+  /** DOM 重绘频率档位，默认 1Hz。 */
   refreshHz: RefreshHz;
 }
 
@@ -38,7 +38,7 @@ export const DEFAULT_INPUT: RawInput = {
   lunchEnd: "13:00",
   overtimeMode: false,
   decimals: DEFAULT_DECIMALS,
-  refreshHz: 10,
+  refreshHz: 1,
 };
 
 /** 校验会报错的字段（开关本身不会报错）。 */
