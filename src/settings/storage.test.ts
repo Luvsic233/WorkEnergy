@@ -85,22 +85,28 @@ describe("storage of the display tiers", () => {
     expect(await adapter.load()).toEqual(saved);
   });
 
-  it("falls back to 12 digits at 1Hz for a legacy record without the new fields", async () => {
+  it("falls back to 18 digits at 1Hz for a legacy record without the new fields", async () => {
     const store = memoryStore();
     store.data.set(STORAGE_KEY, JSON.stringify({ salary: "15000" }));
 
     const loaded = await createAdapter(() => store).load();
 
-    expect(loaded?.decimals).toBe(12);
+    expect(loaded?.decimals).toBe(18);
     expect(loaded?.refreshHz).toBe(1);
   });
 
-  it("rejects stored tiers that the panel never offers", async () => {
+  it("rejects stored tiers that the panel never offers, including the retired 3", async () => {
     const adapter = createAdapter(() => memoryStore());
-    expect(normalizeRawInput({ decimals: 5, refreshHz: 30 })).toMatchObject({ decimals: 12, refreshHz: 1 });
-    expect(normalizeRawInput({ decimals: "6", refreshHz: "60" })).toMatchObject({ decimals: 12, refreshHz: 1 });
-    expect(normalizeRawInput({ decimals: 3, refreshHz: 1 })).toMatchObject({ decimals: 3, refreshHz: 1 });
-    expect(parseStored(JSON.stringify({ decimals: 0, refreshHz: 0 }))).toMatchObject({ decimals: 12, refreshHz: 1 });
+    expect(normalizeRawInput({ decimals: 5, refreshHz: 30 })).toMatchObject({ decimals: 18, refreshHz: 1 });
+    expect(normalizeRawInput({ decimals: "6", refreshHz: "60" })).toMatchObject({ decimals: 18, refreshHz: 1 });
+    expect(normalizeRawInput({ decimals: 3, refreshHz: 1 })).toMatchObject({ decimals: 18, refreshHz: 1 });
+    expect(parseStored(JSON.stringify({ decimals: 0, refreshHz: 0 }))).toMatchObject({ decimals: 18, refreshHz: 1 });
     expect(await adapter.load()).toBeNull();
+  });
+
+  it("keeps an explicitly stored 18 / 12 / 6 tier", () => {
+    expect(normalizeRawInput({ decimals: 18 })).toMatchObject({ decimals: 18 });
+    expect(normalizeRawInput({ decimals: 12 })).toMatchObject({ decimals: 12 });
+    expect(normalizeRawInput({ decimals: 6 })).toMatchObject({ decimals: 6 });
   });
 });

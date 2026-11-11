@@ -145,12 +145,13 @@ describe("startTicker", () => {
 
   it("formats the money at the configured decimal tier", () => {
     const bench = harness(at(10, 0), 1000);
-    startTicker(bench.host, settings, record(bench), { refreshHz: 1, decimals: 3 });
+    startTicker(bench.host, settings, record(bench), { refreshHz: 1, decimals: 18 });
 
     bench.run(3);
 
     expect(bench.frames).toHaveLength(3);
-    expect(bench.frames.every((frame) => frame.money.frac.length === 3)).toBe(true);
+    expect(bench.frames.every((frame) => frame.money.frac.length === 18)).toBe(true);
+    expect(bench.frames.every((frame) => /^\d{18}$/.test(frame.money.frac))).toBe(true);
     expect(bench.frames.every((frame) => frame.money.int === "57")).toBe(true);
   });
 

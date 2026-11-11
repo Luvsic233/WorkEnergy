@@ -25,7 +25,7 @@ describe("DEFAULT_INPUT", () => {
       lunchStart: "12:00",
       lunchEnd: "13:00",
       overtimeMode: false,
-      decimals: 12,
+      decimals: 18,
       refreshHz: 1,
     });
   });
@@ -150,12 +150,12 @@ describe("hourlyAtoms", () => {
   it("converts 10000 / 21.75 days / 8 hours into 10000/174 yuan per hour", () => {
     const atoms = hourlyAtoms(toSettings(DEFAULT_INPUT));
     expect(atoms).toBe((10_000n * ATOMS_PER_YUAN) / 174n);
-    expect(formatAtoms(atoms)).toEqual({ int: "57", frac: "471264367816" });
+    expect(formatAtoms(atoms)).toEqual({ int: "57", frac: "471264367816091954" });
   });
 
   it("lands exactly on a round number when the divisors divide cleanly", () => {
     const settings = toSettings({ ...DEFAULT_INPUT, salary: "17400" });
-    expect(formatAtoms(hourlyAtoms(settings))).toEqual({ int: "100", frac: "000000000000" });
+    expect(formatAtoms(hourlyAtoms(settings))).toEqual({ int: "100", frac: "000000000000000000" });
   });
 
   it("agrees with one hour of earnings from the frozen engine", () => {
@@ -174,10 +174,10 @@ describe("hourlyAtoms", () => {
 });
 
 describe("display tiers: decimals + refreshHz", () => {
-  it("defaults to 12 digits at 1Hz and offers the tiers in panel order", () => {
-    expect(DEFAULT_INPUT.decimals).toBe(12);
+  it("defaults to 18 digits at 1Hz and offers the tiers in panel order", () => {
+    expect(DEFAULT_INPUT.decimals).toBe(18);
     expect(DEFAULT_INPUT.refreshHz).toBe(1);
-    expect(DECIMALS_OPTIONS).toEqual([12, 6, 3]);
+    expect(DECIMALS_OPTIONS).toEqual([18, 12, 6]);
     expect(REFRESH_HZ_OPTIONS).toEqual([60, 10, 1]);
   });
 
@@ -191,10 +191,10 @@ describe("display tiers: decimals + refreshHz", () => {
     }
   });
 
-  it("rejects a decimal tier outside 12 / 6 / 3", () => {
-    for (const decimals of [0, 5, 9, 13]) {
+  it("rejects a decimal tier outside 18 / 12 / 6", () => {
+    for (const decimals of [0, 3, 5, 9, 13]) {
       const result = validateInput({ ...DEFAULT_INPUT, decimals: decimals as unknown as Decimals });
-      expect(result.errors.decimals).toBe("小数位数只能是 12 / 6 / 3");
+      expect(result.errors.decimals).toBe("小数位数只能是 18 / 12 / 6");
       expect(result.settings).toBeNull();
     }
   });
@@ -215,7 +215,7 @@ describe("display tiers: decimals + refreshHz", () => {
   });
 
   it("keeps the display tiers out of the frozen Settings contract", () => {
-    const settings = toSettings({ ...DEFAULT_INPUT, decimals: 3, refreshHz: 1 });
+    const settings = toSettings({ ...DEFAULT_INPUT, decimals: 6, refreshHz: 1 });
     expect(Object.keys(settings).sort()).toEqual([
       "hoursMicro",
       "lunchEndMin",

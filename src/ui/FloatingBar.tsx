@@ -43,7 +43,8 @@ export function FloatingBar({
   return (
     <div className="bar">
       <div className="bar-label">今日实时工资</div>
-      <div className="bar-value">
+      {/* data-decimals 给 CSS 用：18 位时小数区按档位收窄字号，保证 400px 条内不溢出。 */}
+      <div className="bar-value" data-decimals={decimals}>
         <span className="int" ref={intRef}>
           0
         </span>

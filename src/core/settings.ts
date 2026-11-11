@@ -1,8 +1,8 @@
 import { earnedAtoms, parseClock, parseMicro, type Settings } from "./earning";
 import { DEFAULT_DECIMALS, type Decimals } from "./format";
 
-/** 小数位数可选档位，面板按此顺序渲染。 */
-export const DECIMALS_OPTIONS: readonly Decimals[] = [12, 6, 3];
+/** 小数位数可选档位（18 = 机芯原生上限），面板按此顺序渲染，白名单与之一致。 */
+export const DECIMALS_OPTIONS: readonly Decimals[] = [18, 12, 6];
 
 /** DOM 重绘频率档位：60 = 每帧、10 = 每 100ms、1 = 每 1000ms。 */
 export type RefreshHz = 60 | 10 | 1;
@@ -21,7 +21,7 @@ export interface RawInput {
   lunchStart: string;
   lunchEnd: string;
   overtimeMode: boolean;
-  /** 小数位数：12 位（默认）/ 6 位 / 3 位。 */
+  /** 小数位数：18 位（默认，机芯上限）/ 12 位 / 6 位。 */
   decimals: Decimals;
   /** DOM 重绘频率档位，默认 1Hz。 */
   refreshHz: RefreshHz;

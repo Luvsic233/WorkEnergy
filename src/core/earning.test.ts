@@ -118,7 +118,7 @@ describe("earnedAtoms precision", () => {
     const atoms = earnedAtoms(base, HOUR);
     expect(atoms).toBe((10_000n * ATOMS_PER_YUAN) / 174n);
     expect(Math.abs(atomsToNumber(atoms) - 10000 / 174)).toBeLessThan(1e-15);
-    expect(formatAtoms(atoms)).toEqual({ int: "57", frac: "471264367816" });
+    expect(formatAtoms(atoms)).toEqual({ int: "57", frac: "471264367816091954" });
   });
 
   it("does not drift: 3600 one-second ticks equal one 3600 second jump", () => {
@@ -143,17 +143,19 @@ describe("earnedAtoms precision", () => {
     expect(earnedAtoms(base, 0)).toBe(0n);
     expect(earnedAtoms(base, -5)).toBe(0n);
     expect(earnedAtoms(base, 8 * HOUR)).toBe((10_000n * 8n * ATOMS_PER_YUAN) / 174n);
-    expect(formatAtoms(earnedAtoms(base, 8 * HOUR))).toEqual({ int: "459", frac: "770114942528" });
+    expect(formatAtoms(earnedAtoms(base, 8 * HOUR))).toEqual({ int: "459", frac: "770114942528735632" });
   });
 });
 
 describe("formatAtoms", () => {
-  it("prints twelve decimals from BigInt without touching Number", () => {
-    expect(formatAtoms(0n)).toEqual({ int: "0", frac: "000000000000" });
-    expect(formatAtoms(1n)).toEqual({ int: "0", frac: "000000000000" });
-    expect(formatAtoms(1_000_000n)).toEqual({ int: "0", frac: "000000000001" });
-    expect(formatAtoms(ATOMS_PER_YUAN)).toEqual({ int: "1", frac: "000000000000" });
-    expect(formatAtoms(123_456_789_012_345_678_901n)).toEqual({ int: "123", frac: "456789012345" });
-    expect(formatAtoms(1_234_567_890n * ATOMS_PER_YUAN)).toEqual({ int: "1,234,567,890", frac: "000000000000" });
+  it("prints eighteen decimals from BigInt without touching Number", () => {
+    expect(formatAtoms(0n)).toEqual({ int: "0", frac: "000000000000000000" });
+    expect(formatAtoms(1n)).toEqual({ int: "0", frac: "000000000000000001" });
+    expect(formatAtoms(1_000_000n)).toEqual({ int: "0", frac: "000000000001000000" });
+    expect(formatAtoms(ATOMS_PER_YUAN)).toEqual({ int: "1", frac: "000000000000000000" });
+    expect(formatAtoms(123_456_789_012_345_678_901n)).toEqual({ int: "123", frac: "456789012345678901" });
+    expect(formatAtoms(1_234_567_890n * ATOMS_PER_YUAN)).toEqual({ int: "1,234,567,890", frac: "000000000000000000" });
+    // 1e-18 元是本机芯的最小单位，所以 18 位就是上限：再多的原子也只是整数部分的进位。
+    expect(formatAtoms(ATOMS_PER_YUAN - 1n)).toEqual({ int: "0", frac: "999999999999999999" });
   });
 });

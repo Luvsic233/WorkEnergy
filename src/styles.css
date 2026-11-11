@@ -50,6 +50,7 @@ body {
   display: flex;
   align-items: baseline;
   gap: 2px;
+  min-width: 0;
   white-space: nowrap;
 }
 
@@ -68,6 +69,23 @@ body {
   font-size: 17px;
   font-weight: 500;
   color: rgba(160, 220, 255, 0.92);
+}
+
+/*
+ * 小数区字号按档位自适应：条宽固定 400px（内容区 354px），18 位小数在 17px 下约 170px，
+ * 叠加 6 位整数（46px 字号约 175px）必然溢出。按位数收窄小数区字号，保持整数区的主导地位，
+ * 同时保证 18 位时不会有水平溢出或裁切（不淡化、不换行、不裁字）。
+ */
+.bar-value[data-decimals="18"] .frac {
+  font-size: 14px;
+}
+
+.bar-value[data-decimals="12"] .frac {
+  font-size: 16px;
+}
+
+.bar-value[data-decimals="6"] .frac {
+  font-size: 17px;
 }
 
 .bar-value .unit {

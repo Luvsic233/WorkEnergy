@@ -1,9 +1,12 @@
 import { ATOMS_PER_YUAN } from "./earning";
 
-/** 小数位数档位：12 位是默认档（保留到 1e-12 元），另有 6 位 / 3 位两档降噪用。 */
-export type Decimals = 12 | 6 | 3;
+/**
+ * 小数位数档位：18 位是默认档，也是本机芯的原生上限——金额最小单位是 1e-18 元（atoms），
+ * 18 位正好用尽全部精度；另有 12 位 / 6 位两档降噪用。
+ */
+export type Decimals = 18 | 12 | 6;
 
-export const DEFAULT_DECIMALS: Decimals = 12;
+export const DEFAULT_DECIMALS: Decimals = 18;
 
 export interface MoneyParts {
   int: string;
@@ -14,7 +17,7 @@ function groupThousands(digits: string): string {
   return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-/** 每个档位对应的原子除数 10^(18 - decimals)：整数直除即向下截断，全程 BigInt。 */
+/** 每个档位对应的原子除数 10^(18 - decimals)：整数直除即向下截断，全程 BigInt；18 位档除数为 1，即完整余数。 */
 function atomScale(decimals: Decimals): bigint {
   return 10n ** BigInt(18 - decimals);
 }

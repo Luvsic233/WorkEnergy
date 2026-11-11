@@ -31,7 +31,11 @@ function flag(record: Record<string, unknown>, key: keyof RawInput, fallback: bo
   return typeof value === "boolean" ? value : fallback;
 }
 
-/** 枚举型字段：只有落在面板档位里的值才采用，别的（老版本、手改、类型不对）一律回落默认。 */
+/**
+ * 枚举型字段：只有落在面板档位里的值才采用，别的（老版本、手改、类型不对）一律回落默认。
+ * 小数位数的白名单就是 DECIMALS_OPTIONS = 18 / 12 / 6，默认 18；老记录里 12 / 6 仍是合法档位故保留原选择，
+ * 不在白名单里的值（例如上一版的 3）回落 18。
+ */
 function option<T extends number>(record: Record<string, unknown>, key: keyof RawInput, allowed: readonly T[], fallback: T): T {
   const value = record[key];
   if (typeof value !== "number") return fallback;

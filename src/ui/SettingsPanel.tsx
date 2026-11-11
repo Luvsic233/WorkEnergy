@@ -51,7 +51,7 @@ interface ChoiceProps<T extends number> {
   onChange(value: T): void;
 }
 
-/** 档位开关：小数位数 12/6/3、跳动频率 60/10/1Hz，只写草稿，点保存才落盘。 */
+/** 档位开关：小数位数 18/12/6、跳动频率 60/10/1Hz，只写草稿，点保存才落盘。 */
 function Choice<T extends number>({ label, options, value, error, format, onChange }: ChoiceProps<T>) {
   return (
     <div className="settings-choice">
