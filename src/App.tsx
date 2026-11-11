@@ -19,13 +19,17 @@ export function App() {
     localStorageAdapter
       .load()
       .then((stored) => {
-        if (alive && stored) setSavedInput(stored);
+        if (!alive || !stored) return;
+        setSavedInput(stored);
+        setOvertimeMode(stored.overtimeMode);
       })
       .catch(() => undefined);
     return () => {
       alive = false;
     };
   }, []);
+
+  const panelInitial = useMemo(() => ({ ...savedInput, overtimeMode }), [savedInput, overtimeMode]);
 
   const settings = useMemo(
     () => ({ ...(validateInput(savedInput).settings ?? BASE_SETTINGS), overtimeMode }),
@@ -60,10 +64,13 @@ export function App() {
 
       <SettingsPanel
         open={settingsOpen}
-        initial={savedInput}
+        initial={panelInitial}
         adapter={localStorageAdapter}
         onClose={() => setSettingsOpen(false)}
-        onSaved={setSavedInput}
+        onSaved={(value) => {
+          setSavedInput(value);
+          setOvertimeMode(value.overtimeMode);
+        }}
       />
     </main>
   );

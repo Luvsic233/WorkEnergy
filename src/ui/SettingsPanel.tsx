@@ -41,11 +41,12 @@ export function SettingsPanel({ open, initial, adapter, onClose, onSaved }: Sett
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
+  // 只在打开时把面板重设为已保存的输入；打开期间用户的输入不会被外部状态覆盖。
   useEffect(() => {
     if (!open) return;
     setDraft(initial);
     setStatus(null);
-  }, [open, initial]);
+  }, [open]);
 
   const { errors, settings } = useMemo(() => validateInput(draft), [draft]);
   const hourly = settings ? formatAtoms(hourlyAtoms(settings)) : null;
