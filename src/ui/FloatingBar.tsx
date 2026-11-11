@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Settings } from "../core/earning";
+import { formatMicro } from "../core/format";
 import { startTicker } from "./ticker";
 
 interface FloatingBarProps {
@@ -42,7 +43,9 @@ export function FloatingBar({ settings, now }: FloatingBarProps) {
         <span className="phase" ref={phaseRef}>
           —
         </span>
-        <span className="hint">10000 元 / 21.75 天 / 8 小时</span>
+        <span className="hint">
+          {formatMicro(settings.salaryMicro)} 元 / {formatMicro(settings.payDaysMicro)} 天 / {formatMicro(settings.hoursMicro)} 小时
+        </span>
       </div>
     </div>
   );
