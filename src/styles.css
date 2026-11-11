@@ -1,0 +1,98 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+}
+
+body {
+  font-family: ui-sans-serif, "Segoe UI", system-ui, sans-serif;
+  color: #0f172a;
+}
+
+.stage {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: radial-gradient(60% 55% at 50% 38%, rgba(82, 122, 255, 0.18), rgba(0, 0, 0, 0) 72%);
+}
+
+.bar {
+  box-sizing: border-box;
+  width: 400px;
+  height: 120px;
+  padding: 14px 22px 12px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(14, 16, 22, 0.62);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.28);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #f2f4f8;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.bar-label {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: rgba(226, 232, 240, 0.55);
+}
+
+.bar-value {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.bar-value .int {
+  font-size: 46px;
+  font-weight: 650;
+  letter-spacing: 0.5px;
+}
+
+.bar-value .dot {
+  font-size: 28px;
+  opacity: 0.55;
+}
+
+.bar-value .frac {
+  font-size: 17px;
+  font-weight: 500;
+  color: rgba(160, 220, 255, 0.92);
+}
+
+.bar-value .unit {
+  margin-left: 4px;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.5);
+}
+
+.bar-foot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.45);
+}
+
+.controls {
+  display: flex;
+  gap: 18px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
