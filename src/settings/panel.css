@@ -218,3 +218,49 @@
   background: transparent;
   color: rgba(226, 232, 240, 0.55);
 }
+
+/* 显示档位：小数位数 12/6/3、跳动频率 60/10/1Hz，复用面板既有的深色卡片语汇。 */
+.settings-display {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(8, 10, 14, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.settings-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-segmented {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-segment {
+  flex: 1;
+  padding: 6px 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 10, 14, 0.5);
+  color: rgba(226, 232, 240, 0.72);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.settings-segment:hover {
+  border-color: rgba(160, 220, 255, 0.4);
+  color: #f2f4f8;
+}
+
+.settings-segment.is-active {
+  border-color: rgba(82, 122, 255, 0.55);
+  background: rgba(82, 122, 255, 0.22);
+  color: #eef2ff;
+}

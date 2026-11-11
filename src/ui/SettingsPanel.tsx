@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatAtoms } from "../core/format";
-import { DEFAULT_INPUT, hourlyAtoms, validateInput, type RawInput } from "../core/settings";
+import {
+  DECIMALS_OPTIONS,
+  DEFAULT_INPUT,
+  hourlyAtoms,
+  REFRESH_HZ_OPTIONS,
+  validateInput,
+  type RawInput,
+} from "../core/settings";
 import type { StorageAdapter } from "../settings/storage";
 import "../settings/panel.css";
 
@@ -32,6 +39,41 @@ function Field({ label, value, error, onChange }: FieldProps) {
       />
       {error ? <span className="settings-error">{error}</span> : null}
     </label>
+  );
+}
+
+interface ChoiceProps<T extends number> {
+  label: string;
+  options: readonly T[];
+  value: T;
+  error?: string;
+  format(option: T): string;
+  onChange(value: T): void;
+}
+
+/** 档位开关：小数位数 12/6/3、跳动频率 60/10/1Hz，只写草稿，点保存才落盘。 */
+function Choice<T extends number>({ label, options, value, error, format, onChange }: ChoiceProps<T>) {
+  return (
+    <div className="settings-choice">
+      <span className="settings-field-label">{label}</span>
+      <div className="settings-segmented" role="group" aria-label={label}>
+        {options.map((option) => {
+          const active = option === value;
+          return (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={active}
+              className={active ? "settings-segment is-active" : "settings-segment"}
+              onClick={() => onChange(option)}
+            >
+              {format(option)}
+            </button>
+          );
+        })}
+      </div>
+      {error ? <span className="settings-error">{error}</span> : null}
+    </div>
   );
 }
 
@@ -91,6 +133,25 @@ export function SettingsPanel({ open, initial, adapter, onClose, onSaved }: Sett
         <span className="settings-hourly-value">
           {hourly ? `${hourly.int}.${hourly.frac}` : "—"} <span className="settings-hourly-unit">元 / 小时</span>
         </span>
+      </div>
+
+      <div className="settings-display">
+        <Choice
+          label="小数位数"
+          options={DECIMALS_OPTIONS}
+          value={draft.decimals}
+          error={errors.decimals}
+          format={(option) => `${option} 位`}
+          onChange={(value) => update("decimals", value)}
+        />
+        <Choice
+          label="跳动频率"
+          options={REFRESH_HZ_OPTIONS}
+          value={draft.refreshHz}
+          error={errors.refreshHz}
+          format={(option) => `${option} Hz`}
+          onChange={(value) => update("refreshHz", value)}
+        />
       </div>
 
       <button

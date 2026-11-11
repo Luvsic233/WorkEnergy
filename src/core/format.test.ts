@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseMicro } from "./earning";
-import { formatMicro } from "./format";
+import { ATOMS_PER_YUAN, parseMicro } from "./earning";
+import { formatAtoms, formatMicro } from "./format";
 
 describe("formatMicro", () => {
   it("keeps significant fraction digits: 21750000 => 21.75", () => {
@@ -32,5 +32,45 @@ describe("formatMicro", () => {
     expect(formatMicro(parseMicro("20000"))).toBe("20000");
     expect(formatMicro(parseMicro("21.75"))).toBe("21.75");
     expect(formatMicro(parseMicro("8"))).toBe("8");
+  });
+});
+
+describe("formatAtoms decimals", () => {
+  // 57.471264367816 元，正好 12 位小数（10000 / 21.75 天 / 8 小时的时薪量级）。
+  const atoms = 57_471_264_367_816_000_000n;
+
+  it("keeps 12 digits by default and accepts an explicit 12", () => {
+    expect(formatAtoms(atoms)).toEqual({ int: "57", frac: "471264367816" });
+    expect(formatAtoms(atoms, 12)).toEqual({ int: "57", frac: "471264367816" });
+  });
+
+  it("cuts the fraction to 6 digits for the 6-digit tier", () => {
+    expect(formatAtoms(atoms, 6)).toEqual({ int: "57", frac: "471264" });
+  });
+
+  it("cuts the fraction to 3 digits for the 3-digit tier", () => {
+    expect(formatAtoms(atoms, 3)).toEqual({ int: "57", frac: "471" });
+  });
+
+  it("truncates toward zero instead of rounding", () => {
+    const nine = 1_234_999_999_999_999_999n; // 1.234999999999999999 元
+    expect(formatAtoms(nine, 12)).toEqual({ int: "1", frac: "234999999999" });
+    expect(formatAtoms(nine, 6)).toEqual({ int: "1", frac: "234999" });
+    expect(formatAtoms(nine, 3)).toEqual({ int: "1", frac: "234" });
+  });
+
+  it("pads every tier to its own width", () => {
+    expect(formatAtoms(0n)).toEqual({ int: "0", frac: "000000000000" });
+    expect(formatAtoms(0n, 6)).toEqual({ int: "0", frac: "000000" });
+    expect(formatAtoms(0n, 3)).toEqual({ int: "0", frac: "000" });
+  });
+
+  it("keeps the sign, the thousands separator and the fraction at every tier", () => {
+    expect(formatAtoms(-1_500_000_000_000_000_000n, 3)).toEqual({ int: "-1", frac: "500" });
+    expect(formatAtoms(-1_500_000_000_000_000_000n, 6)).toEqual({ int: "-1", frac: "500000" });
+    expect(formatAtoms(10_000n * ATOMS_PER_YUAN + 250_000_000_000_000_000n, 3)).toEqual({
+      int: "10,000",
+      frac: "250",
+    });
   });
 });

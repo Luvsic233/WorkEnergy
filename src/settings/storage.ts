@@ -1,4 +1,11 @@
-import { DEFAULT_INPUT, type RawInput } from "../core/settings";
+import {
+  DECIMALS_OPTIONS,
+  DEFAULT_INPUT,
+  REFRESH_HZ_OPTIONS,
+  type RawInput,
+  type RefreshHz,
+} from "../core/settings";
+import type { Decimals } from "../core/format";
 
 /** 外壳波次（Tauri store / Neutralino storage）只需替换这个适配器的实现。 */
 export interface StorageAdapter {
@@ -24,6 +31,13 @@ function flag(record: Record<string, unknown>, key: keyof RawInput, fallback: bo
   return typeof value === "boolean" ? value : fallback;
 }
 
+/** 枚举型字段：只有落在面板档位里的值才采用，别的（老版本、手改、类型不对）一律回落默认。 */
+function option<T extends number>(record: Record<string, unknown>, key: keyof RawInput, allowed: readonly T[], fallback: T): T {
+  const value = record[key];
+  if (typeof value !== "number") return fallback;
+  return (allowed as readonly number[]).includes(value) ? (value as T) : fallback;
+}
+
 /** 老版本 / 缺字段 / 类型不对的记录一律补默认值，不让它把面板炸掉。 */
 export function normalizeRawInput(value: unknown): RawInput | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
@@ -38,6 +52,8 @@ export function normalizeRawInput(value: unknown): RawInput | null {
     lunchStart: text(record, "lunchStart", DEFAULT_INPUT.lunchStart),
     lunchEnd: text(record, "lunchEnd", DEFAULT_INPUT.lunchEnd),
     overtimeMode: flag(record, "overtimeMode", DEFAULT_INPUT.overtimeMode),
+    decimals: option<Decimals>(record, "decimals", DECIMALS_OPTIONS, DEFAULT_INPUT.decimals),
+    refreshHz: option<RefreshHz>(record, "refreshHz", REFRESH_HZ_OPTIONS, DEFAULT_INPUT.refreshHz),
   };
 }
 

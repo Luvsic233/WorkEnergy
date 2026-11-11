@@ -1,6 +1,16 @@
 import { earnedAtoms, parseClock, parseMicro, type Settings } from "./earning";
+import { DEFAULT_DECIMALS, type Decimals } from "./format";
 
-/** 用户在设置面板里能看到的全部输入，一律是字符串 / 布尔，没有任何 Number 参与金额。 */
+/** 小数位数可选档位，面板按此顺序渲染。 */
+export const DECIMALS_OPTIONS: readonly Decimals[] = [12, 6, 3];
+
+/** DOM 重绘频率档位：60 = 每帧、10 = 每 100ms、1 = 每 1000ms。 */
+export type RefreshHz = 60 | 10 | 1;
+
+/** 跳动频率可选档位，面板按此顺序渲染。 */
+export const REFRESH_HZ_OPTIONS: readonly RefreshHz[] = [60, 10, 1];
+
+/** 用户在设置面板里能看到的全部输入，金额一律是字符串 / 布尔，没有任何 Number 参与金额。 */
 export interface RawInput {
   salary: string;
   payDays: string;
@@ -11,6 +21,10 @@ export interface RawInput {
   lunchStart: string;
   lunchEnd: string;
   overtimeMode: boolean;
+  /** 小数位数：12 位（默认）/ 6 位 / 3 位。 */
+  decimals: Decimals;
+  /** DOM 重绘频率档位，默认 10Hz。 */
+  refreshHz: RefreshHz;
 }
 
 export const DEFAULT_INPUT: RawInput = {
@@ -23,10 +37,21 @@ export const DEFAULT_INPUT: RawInput = {
   lunchStart: "12:00",
   lunchEnd: "13:00",
   overtimeMode: false,
+  decimals: DEFAULT_DECIMALS,
+  refreshHz: 10,
 };
 
 /** 校验会报错的字段（开关本身不会报错）。 */
-export type InputField = "salary" | "payDays" | "hours" | "workStart" | "workEnd" | "lunchStart" | "lunchEnd";
+export type InputField =
+  | "salary"
+  | "payDays"
+  | "hours"
+  | "workStart"
+  | "workEnd"
+  | "lunchStart"
+  | "lunchEnd"
+  | "decimals"
+  | "refreshHz";
 
 export type FieldErrors = Partial<Record<InputField, string>>;
 
@@ -56,9 +81,14 @@ function clockError(label: string, raw: string): string | null {
   return null;
 }
 
+/** 枚举型字段（小数位数 / 跳动频率）只接受面板给出的档位。 */
+function choiceError<T extends number>(label: string, allowed: readonly T[], value: number): string | null {
+  return (allowed as readonly number[]).includes(value) ? null : `${label}只能是 ${allowed.join(" / ")}`;
+}
+
 /**
  * 用户输入（字符串）→ 契约 Settings（BigInt 微单位）。
- * 金额字段一律走 parseMicro，全程整数，绝不 parseFloat。
+ * 金额字段一律走 parseMicro，全程整数，绝不 parseFloat；显示档位不进 Settings（薪资契约冻结）。
  */
 export function toSettings(input: RawInput): Settings {
   return {
@@ -84,6 +114,12 @@ export function validateInput(input: RawInput): ValidationResult {
 
   const hours = decimalError("日工时", input.hours, true);
   if (hours) errors.hours = hours;
+
+  const decimals = choiceError("小数位数", DECIMALS_OPTIONS, input.decimals);
+  if (decimals) errors.decimals = decimals;
+
+  const refreshHz = choiceError("跳动频率", REFRESH_HZ_OPTIONS, input.refreshHz);
+  if (refreshHz) errors.refreshHz = refreshHz;
 
   const startError = clockError("上班时间", input.workStart);
   if (startError) errors.workStart = startError;

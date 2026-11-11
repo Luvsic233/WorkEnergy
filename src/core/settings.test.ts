@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { ATOMS_PER_YUAN, earnedAtoms, parseSettings } from "./earning";
-import { formatAtoms } from "./format";
-import { DEFAULT_INPUT, hourlyAtoms, ONE_HOUR_MS, toSettings, validateInput } from "./settings";
+import { formatAtoms, type Decimals } from "./format";
+import {
+  DECIMALS_OPTIONS,
+  DEFAULT_INPUT,
+  hourlyAtoms,
+  ONE_HOUR_MS,
+  REFRESH_HZ_OPTIONS,
+  toSettings,
+  validateInput,
+  type RawInput,
+  type RefreshHz,
+} from "./settings";
 
 describe("DEFAULT_INPUT", () => {
   it("keeps the daily entry to a single monthly salary and tucks the rest away", () => {
@@ -15,6 +25,8 @@ describe("DEFAULT_INPUT", () => {
       lunchStart: "12:00",
       lunchEnd: "13:00",
       overtimeMode: false,
+      decimals: 12,
+      refreshHz: 10,
     });
   });
 
@@ -158,5 +170,61 @@ describe("hourlyAtoms", () => {
   it("is zero when the engine cannot pay (misconfigured guard stays in one place)", () => {
     const broken = { ...toSettings(DEFAULT_INPUT), workEndMin: 60 };
     expect(hourlyAtoms(broken)).toBe(0n);
+  });
+});
+
+describe("display tiers: decimals + refreshHz", () => {
+  it("defaults to 12 digits at 10Hz and offers the tiers in panel order", () => {
+    expect(DEFAULT_INPUT.decimals).toBe(12);
+    expect(DEFAULT_INPUT.refreshHz).toBe(10);
+    expect(DECIMALS_OPTIONS).toEqual([12, 6, 3]);
+    expect(REFRESH_HZ_OPTIONS).toEqual([60, 10, 1]);
+  });
+
+  it("accepts every offered tier and leaves the earning contract untouched", () => {
+    for (const decimals of DECIMALS_OPTIONS) {
+      for (const refreshHz of REFRESH_HZ_OPTIONS) {
+        const result = validateInput({ ...DEFAULT_INPUT, decimals, refreshHz });
+        expect(result.errors).toEqual({});
+        expect(result.settings).toEqual(toSettings(DEFAULT_INPUT));
+      }
+    }
+  });
+
+  it("rejects a decimal tier outside 12 / 6 / 3", () => {
+    for (const decimals of [0, 5, 9, 13]) {
+      const result = validateInput({ ...DEFAULT_INPUT, decimals: decimals as unknown as Decimals });
+      expect(result.errors.decimals).toBe("小数位数只能是 12 / 6 / 3");
+      expect(result.settings).toBeNull();
+    }
+  });
+
+  it("rejects a refresh rate outside 60 / 10 / 1", () => {
+    for (const refreshHz of [0, 30, 120, -10]) {
+      const result = validateInput({ ...DEFAULT_INPUT, refreshHz: refreshHz as unknown as RefreshHz });
+      expect(result.errors.refreshHz).toBe("跳动频率只能是 60 / 10 / 1");
+      expect(result.settings).toBeNull();
+    }
+  });
+
+  it("reports a broken display tier next to the other broken fields", () => {
+    const broken: RawInput = { ...DEFAULT_INPUT, salary: "0", decimals: 9 as unknown as Decimals, refreshHz: 30 as unknown as RefreshHz };
+    const result = validateInput(broken);
+    expect(Object.keys(result.errors).sort()).toEqual(["decimals", "refreshHz", "salary"]);
+    expect(result.settings).toBeNull();
+  });
+
+  it("keeps the display tiers out of the frozen Settings contract", () => {
+    const settings = toSettings({ ...DEFAULT_INPUT, decimals: 3, refreshHz: 1 });
+    expect(Object.keys(settings).sort()).toEqual([
+      "hoursMicro",
+      "lunchEndMin",
+      "lunchStartMin",
+      "overtimeMode",
+      "payDaysMicro",
+      "salaryMicro",
+      "workEndMin",
+      "workStartMin",
+    ]);
   });
 });

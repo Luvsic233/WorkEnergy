@@ -1,16 +1,28 @@
 import { useEffect, useRef } from "react";
 import type { Settings } from "../core/earning";
-import { formatMicro } from "../core/format";
+import { DEFAULT_DECIMALS, formatMicro, type Decimals } from "../core/format";
+import { DEFAULT_INPUT, type RefreshHz } from "../core/settings";
 import { startTicker } from "./ticker";
+
+/** 前 6 位小数正常显示，多出来的位数弱化——本组件与 ticker 共用的拆分点。 */
+const STRONG_FRAC_DIGITS = 6;
 
 interface FloatingBarProps {
   settings: Settings;
+  decimals?: Decimals;
+  refreshHz?: RefreshHz;
   now?: () => number;
 }
 
-export function FloatingBar({ settings, now }: FloatingBarProps) {
+export function FloatingBar({
+  settings,
+  decimals = DEFAULT_DECIMALS,
+  refreshHz = DEFAULT_INPUT.refreshHz,
+  now,
+}: FloatingBarProps) {
   const intRef = useRef<HTMLSpanElement>(null);
   const fracRef = useRef<HTMLSpanElement>(null);
+  const weakRef = useRef<HTMLSpanElement>(null);
   const phaseRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
@@ -19,12 +31,21 @@ export function FloatingBar({ settings, now }: FloatingBarProps) {
       schedule: (callback: () => void) => requestAnimationFrame(callback),
       cancel: (handle: number) => cancelAnimationFrame(handle),
     };
-    return startTicker(host, settings, ({ money, phase }) => {
-      if (intRef.current) intRef.current.textContent = money.int;
-      if (fracRef.current) fracRef.current.textContent = money.frac;
-      if (phaseRef.current) phaseRef.current.textContent = phase;
-    });
-  }, [settings, now]);
+    // 每帧只写 textContent，不 setState：节流判断在 ticker 里（shouldRender）。
+    return startTicker(
+      host,
+      settings,
+      ({ money, phase }) => {
+        if (intRef.current) intRef.current.textContent = money.int;
+        if (fracRef.current) fracRef.current.textContent = money.frac.slice(0, STRONG_FRAC_DIGITS);
+        if (weakRef.current) weakRef.current.textContent = money.frac.slice(STRONG_FRAC_DIGITS);
+        if (phaseRef.current) phaseRef.current.textContent = phase;
+      },
+      { refreshHz, decimals },
+    );
+  }, [settings, decimals, refreshHz, now]);
+
+  const strongDigits = Math.min(decimals, STRONG_FRAC_DIGITS);
 
   return (
     <div className="bar">
@@ -35,8 +56,13 @@ export function FloatingBar({ settings, now }: FloatingBarProps) {
         </span>
         <span className="dot">.</span>
         <span className="frac" ref={fracRef}>
-          000000000000
+          {"0".repeat(strongDigits)}
         </span>
+        {decimals > STRONG_FRAC_DIGITS ? (
+          <span className="frac frac-weak" ref={weakRef}>
+            {"0".repeat(decimals - STRONG_FRAC_DIGITS)}
+          </span>
+        ) : null}
         <span className="unit">元</span>
       </div>
       <div className="bar-foot">
