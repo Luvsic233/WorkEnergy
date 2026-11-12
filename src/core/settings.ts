@@ -4,7 +4,7 @@ import { DEFAULT_DECIMALS, type Decimals } from "./format";
 /** 小数位数可选档位（18 = 机芯原生上限），面板按此顺序渲染，白名单与之一致。 */
 export const DECIMALS_OPTIONS: readonly Decimals[] = [18, 12, 6];
 
-/** 文本跳变频率档位：60 = 每帧、10 = 每 100ms、1 = 每 1000ms。 */
+/** 文本跳变频率档位：60 = 每帧、10 = 每 100ms、1 = 每 1000ms。roll 模式下它就是小数滚动的节拍。 */
 export type RefreshHz = 60 | 10 | 1;
 
 /** 跳动频率可选档位，面板按此顺序渲染。 */
@@ -13,7 +13,8 @@ export const REFRESH_HZ_OPTIONS: readonly RefreshHz[] = [60, 10, 1];
 /**
  * 金额区的显示方式：
  * - roll：整数位常态精确停在该位的整格上，只有这一位数值变化时才用 260ms 快速滚过一格
- *   （绝不长时间停在两格之间）；小数不是滚轮，按 refreshHz 整片跳变。
+ *   （绝不长时间停在两格之间）；小数每 1000/refreshHz 毫秒才检测一次变化、向上滚 d 格，
+ *   滚动时长随档位自适应（见 RollingDigit 的 fracCapMs）。
  * - jump：没有任何动画，整数与小数一起按 refreshHz 整片跳变（旧行为）。
  */
 export type DisplayMode = "roll" | "jump";
@@ -34,7 +35,7 @@ export interface RawInput {
   overtimeMode: boolean;
   /** 小数位数：18 位（默认，机芯上限）/ 12 位 / 6 位。 */
   decimals: Decimals;
-  /** 文本跳变频率档位，默认 1Hz；roll 模式只管小数文本，jump 模式管整串数字。 */
+  /** 文本跳变频率档位，默认 10Hz；roll 模式管小数滚动的节拍与时长，jump 模式管整串数字。 */
   refreshHz: RefreshHz;
   /** 金额区显示方式，默认 roll（整数精确落位 + 变化时快速滚一格，小数按 refreshHz 跳）。 */
   displayMode: DisplayMode;
@@ -51,7 +52,7 @@ export const DEFAULT_INPUT: RawInput = {
   lunchEnd: "13:00",
   overtimeMode: false,
   decimals: DEFAULT_DECIMALS,
-  refreshHz: 1,
+  refreshHz: 10,
   displayMode: "roll",
 };
 

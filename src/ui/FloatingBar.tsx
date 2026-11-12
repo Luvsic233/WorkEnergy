@@ -69,11 +69,13 @@ function RollingInt({ ref }: RollingIntProps) {
 interface RollingFracProps {
   /** 小数位数档位：格子数跟着档位走（18 / 12 / 6）。 */
   decimals: Decimals;
+  /** 跳动频率档位：既决定拍子（哪一帧才检测变化），也决定单段滚动的时长上限。 */
+  refreshHz: RefreshHz;
   ref?: Ref<RollingFracHandle>;
 }
 
 /** 小数区：每位一个滚条格子，向后代换的是"向上滚 d 格"而不是整片跳文本。 */
-function RollingFrac({ decimals, ref }: RollingFracProps) {
+function RollingFrac({ decimals, refreshHz, ref }: RollingFracProps) {
   const handles = useRef<(FracCellHandle | null)[]>([]);
 
   useImperativeHandle(
@@ -95,6 +97,7 @@ function RollingFrac({ decimals, ref }: RollingFracProps) {
         <FracCell
           key={index}
           fpos={index + 1}
+          refreshHz={refreshHz}
           ref={(handle) => {
             handles.current[index] = handle;
           }}
@@ -107,7 +110,7 @@ function RollingFrac({ decimals, ref }: RollingFracProps) {
 interface FloatingBarProps {
   settings: Settings;
   decimals?: Decimals;
-  /** 小数位的改期频率：roll / jump 两种模式都按它决定"哪一帧才允许检测数字变化"。 */
+  /** 跳动频率档位（默认 10Hz）：roll 模式决定小数滚动的拍子与时长，jump 模式决定整串跳变频率。 */
   refreshHz?: RefreshHz;
   displayMode?: DisplayMode;
   now?: () => number;
@@ -186,7 +189,7 @@ export function FloatingBar({
         {displayMode === "roll" ? <RollingInt ref={rollerRef} /> : <span className="int" ref={intRef}>0</span>}
         <span className="dot">.</span>
         {displayMode === "roll" ? (
-          <RollingFrac decimals={decimals} ref={fracRollerRef} />
+          <RollingFrac decimals={decimals} refreshHz={refreshHz} ref={fracRollerRef} />
         ) : (
           <span className="frac" ref={fracRef}>
             {"0".repeat(decimals)}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseSettings } from "../core/earning";
-import { fracFrame, fracIndexAt, fracProgress, type FracMotion } from "./RollingDigit";
+import { DEFAULT_INPUT } from "../core/settings";
+import { fracDurationMs, fracFrame, fracIndexAt, fracProgress, type FracMotion } from "./RollingDigit";
 import { intervalMsOf, nextDeadline, shouldRender, startTicker, type TickerFrame, type TickerHost } from "./ticker";
 
 const settings = parseSettings({ salary: "10000" });
@@ -332,7 +333,7 @@ describe("小数位滚动：refreshHz 门限", () => {
       if (frame.textDue) dueStamps.add(frame.nowMs);
       for (let index = 0; index < 18; index += 1) {
         const prev = motions[index];
-        const next = fracFrame(prev, frame.columns.frac[index].digit, frame.nowMs, frame.textDue);
+        const next = fracFrame(prev, frame.columns.frac[index].digit, frame.nowMs, frame.textDue, 1);
         if (next.from !== next.to && (prev === null || prev.from === prev.to)) {
           epochs.add(next.startMs);
           startsPerDigit[index] += 1;
@@ -360,10 +361,10 @@ describe("小数位滚动：refreshHz 门限", () => {
     let rolling = 0;
     for (const frame of bench.frames) {
       for (let index = 0; index < 18; index += 1) {
-        const motion = fracFrame(motions[index], frame.columns.frac[index].digit, frame.nowMs, frame.textDue);
+        const motion = fracFrame(motions[index], frame.columns.frac[index].digit, frame.nowMs, frame.textDue, 1);
         motions[index] = motion;
-        const position = fracIndexAt(motion, frame.nowMs);
-        const progress = fracProgress(motion, frame.nowMs);
+        const position = fracIndexAt(motion, frame.nowMs, 1);
+        const progress = fracProgress(motion, frame.nowMs, 1);
         if (progress === 0 || progress === 1) {
           // 静止 / 起点 / 落点：位移格号必须精确是整数，没有半格残差
           expect(Number.isInteger(position)).toBe(true);
@@ -377,5 +378,104 @@ describe("小数位滚动：refreshHz 门限", () => {
     // 3 秒里滚动只占 215–335ms 的少数片段，绝大多数帧都停在整格上
     expect(rolling).toBeGreaterThan(0);
     expect(rolling / (bench.frames.length * 18)).toBeLessThan(0.5);
+  });
+});
+
+describe("小数滚动节拍：跟随 refreshHz（默认 10Hz）", () => {
+  /** 等距 100fps 帧：让"门限就是 1000/refreshHz"这件事本身可测，不掺帧粒度漂移。 */
+  const step = 10;
+  const THREE_SECONDS = 300; // 300 帧 × 10ms
+
+  it("starts a roll about 30 times in 3s at 10Hz — not 3 times, not every frame", () => {
+    const bench = harness(at(10, 0), step);
+    startTicker(bench.host, settings, record(bench), { refreshHz: 10, decimals: 18, displayMode: "roll" });
+
+    bench.run(THREE_SECONDS);
+
+    expect(bench.frames).toHaveLength(THREE_SECONDS); // 动画仍然每帧推进，被门限挡住的只是"检测变化"
+    const dues = bench.frames.filter((frame) => frame.textDue);
+    expect(dues).toHaveLength(30); // 3000ms / 100ms
+    expect(dues.length).toBeLessThan(THREE_SECONDS / 5);
+    const stamps = dues.map((frame) => frame.nowMs);
+    for (let index = 1; index < stamps.length; index += 1) {
+      expect(stamps[index] - stamps[index - 1]).toBe(100);
+    }
+  });
+
+  it("still starts about 3 rolls in 3s at the 1Hz tier", () => {
+    const bench = harness(at(10, 0), step);
+    startTicker(bench.host, settings, record(bench), { refreshHz: 1, decimals: 18, displayMode: "roll" });
+
+    bench.run(THREE_SECONDS);
+
+    const dues = bench.frames.filter((frame) => frame.textDue);
+    expect(dues).toHaveLength(3); // 3000ms / 1000ms
+    const stamps = dues.map((frame) => frame.nowMs);
+    for (let index = 1; index < stamps.length; index += 1) {
+      expect(stamps[index] - stamps[index - 1]).toBe(1_000);
+    }
+  });
+
+  it("marks every frame due at the 60Hz tier: 300 in 3 seconds", () => {
+    const bench = harness(at(10, 0), step);
+    startTicker(bench.host, settings, record(bench), { refreshHz: 60, decimals: 18, displayMode: "roll" });
+
+    bench.run(THREE_SECONDS);
+
+    expect(bench.frames.filter((frame) => frame.textDue)).toHaveLength(THREE_SECONDS);
+  });
+
+  it("runs the default tier end to end: 10Hz roll on a fresh install is 30 beats in 3s", () => {
+    expect(DEFAULT_INPUT.refreshHz).toBe(10);
+    expect(DEFAULT_INPUT.displayMode).toBe("roll");
+
+    const bench = harness(at(10, 0), step);
+    startTicker(bench.host, settings, record(bench), {
+      refreshHz: DEFAULT_INPUT.refreshHz,
+      decimals: DEFAULT_INPUT.decimals,
+      displayMode: DEFAULT_INPUT.displayMode,
+    });
+
+    bench.run(THREE_SECONDS);
+
+    expect(bench.frames.filter((frame) => frame.textDue)).toHaveLength(30);
+  });
+
+  it("lands every 10Hz roll before the next beat: one epoch per due frame, no residual", () => {
+    const bench = harness(at(10, 0), step);
+    startTicker(bench.host, settings, record(bench), { refreshHz: 10, decimals: 18, displayMode: "roll" });
+
+    bench.run(THREE_SECONDS);
+
+    const motions: (FracMotion | null)[] = Array.from({ length: 18 }, () => null);
+    const epochs = new Set<number>();
+    let longest = 0;
+    let rollingFrames = 0;
+    for (const frame of bench.frames) {
+      for (let index = 0; index < 18; index += 1) {
+        const prev = motions[index];
+        const next = fracFrame(prev, frame.columns.frac[index].digit, frame.nowMs, frame.textDue, 10);
+        if (next.from !== next.to && (prev === null || prev.from === prev.to)) {
+          epochs.add(next.startMs);
+          longest = Math.max(longest, next.to - next.from);
+        }
+        motions[index] = next;
+        const position = fracIndexAt(next, frame.nowMs, 10);
+        const progress = fracProgress(next, frame.nowMs, 10);
+        if (progress > 0 && progress < 1) {
+          rollingFrames += 1;
+          // 正在两格之间推进（浮点值可能恰好落在整数上，所以只断言"严格在两点之间"）
+          expect(position).toBeGreaterThan(next.from);
+          expect(position).toBeLessThan(next.to);
+        } else {
+          expect(Number.isInteger(position)).toBe(true); // 落位精确，无残差
+        }
+      }
+    }
+    // 首帧是"直接落位"不算滚动，之后每个到期帧一段（每段都在下一拍之前落地）
+    expect(epochs.size).toBe(29);
+    expect(longest).toBeGreaterThan(0);
+    expect(fracDurationMs(longest, 10)).toBe(90); // 本档位任何一段都不超过 90ms
+    expect(rollingFrames).toBeGreaterThan(0);
   });
 });

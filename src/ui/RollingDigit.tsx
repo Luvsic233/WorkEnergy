@@ -1,4 +1,5 @@
 import { useImperativeHandle, useRef, type Ref } from "react";
+import type { RefreshHz } from "../core/settings";
 
 /**
  * 一格的步长（em），必须与 styles.css 里 .bar-value .digit / .digit-glyph 的 0.8em 一致。
@@ -76,6 +77,8 @@ export function motionAt(prev: DigitMotion | null, digit: number, nowMs: number)
 /* ---------------------------------------------------------------------------------------------
  * 小数位：与整数位同一套"一格窗口 + 一条滚条"的格子，区别只在滚动规则。
  * 小数位永远向上滚，滚过的格数就是数值差，所以滚条要覆盖一整圈：from ≤ 9 且 d ≤ 9 ⇒ 最大格号 18。
+ * 节拍由 refreshHz 决定（每 1000/refreshHz 毫秒才检测一次变化），单段时长再按同一档位自适应，
+ * 保证 10Hz 下 90ms 内滚完、跟得上 100ms 的下一拍。
  * 第 index 格的字形是 String(index % 10)，于是"落地格号 = from + d"与"新数字"天然同余，
  * 落地后归一回 (落点 % 10) 那一下字形完全相同，看不出任何跳动。
  * ------------------------------------------------------------------------------------------- */
@@ -91,8 +94,8 @@ export const FRAC_BASE_MS = 200;
 /** 每多滚一格的追加时长（ms）。 */
 export const FRAC_STEP_MS = 15;
 
-/** 单次小数滚动的时长上限（ms）：d = 9 时 335ms，仍在 340 以内。 */
-export const FRAC_MAX_MS = 340;
+/** 单段滚动时长上限的下界（ms）：60Hz 档按 1000/60 的 90% 只有 15ms，会退化成瞬移，钳在 60ms。 */
+export const FRAC_MIN_CAP_MS = 60;
 
 /** 一位小数数字的滚动状态：与整数位同构，只是 to 可以超过 10（滚条上的重复格）。 */
 export interface FracMotion {
@@ -106,9 +109,17 @@ export function fracDistance(fromDigit: number, toDigit: number): number {
   return (((toDigit - fromDigit) % 10) + 10) % 10;
 }
 
-/** 滚动时长：200ms + 15ms × 格数，上限 340ms（d=1 → 215ms，d=9 → 335ms）。 */
-export function fracDurationMs(distance: number): number {
-  return Math.min(FRAC_BASE_MS + FRAC_STEP_MS * distance, FRAC_MAX_MS);
+/**
+ * 单段滚动的时长上限（ms）：按本档位的到期间隔 1000/refreshHz 的 90% 给预算，让一段滚动赶在下一拍之前落地。
+ * 1Hz → 900ms（比 200 + 15d 的自然上限还大，等于不设限）、10Hz → 90ms、60Hz → 60ms（下界兜底）。
+ */
+export function fracCapMs(refreshHz: RefreshHz): number {
+  return Math.max(FRAC_MIN_CAP_MS, Math.floor((1000 * 0.9) / refreshHz));
+}
+
+/** 滚动时长：min(200ms + 15ms × 格数, 本档位上限)。1Hz 下就是原来的 215–335ms。 */
+export function fracDurationMs(distance: number, refreshHz: RefreshHz): number {
+  return Math.min(FRAC_BASE_MS + FRAC_STEP_MS * distance, fracCapMs(refreshHz));
 }
 
 /** 静止态：这一位就停在自己的整格上。 */
@@ -117,17 +128,17 @@ function settledAt(digit: number, nowMs: number): FracMotion {
 }
 
 /** 滚动进度：0 = 还停在起点格，1 = 已经落到落点格；静止态恒为 1。只服务动画，金额不经浮点。 */
-export function fracProgress(motion: FracMotion, nowMs: number): number {
+export function fracProgress(motion: FracMotion, nowMs: number, refreshHz: RefreshHz): number {
   if (motion.to === motion.from) return 1;
-  const span = fracDurationMs(motion.to - motion.from);
+  const span = fracDurationMs(motion.to - motion.from, refreshHz);
   const elapsed = nowMs - motion.startMs;
   if (elapsed <= 0) return 0;
   return elapsed >= span ? 1 : elapsed / span;
 }
 
 /** 当前位移格号：静止时是整数格，滚动时在 from 与 to 之间线性推进，到点精确等于 to。 */
-export function fracIndexAt(motion: FracMotion, nowMs: number): number {
-  return motion.from + (motion.to - motion.from) * fracProgress(motion, nowMs);
+export function fracIndexAt(motion: FracMotion, nowMs: number, refreshHz: RefreshHz): number {
+  return motion.from + (motion.to - motion.from) * fracProgress(motion, nowMs, refreshHz);
 }
 
 /**
@@ -137,16 +148,18 @@ export function fracIndexAt(motion: FracMotion, nowMs: number): number {
  * - 滚动未完成：不被打断，继续把这一段推完（任何模式下都不会跳到"半途"的另一段）。
  * - 滚动完成：先归一回 (落点 % 10)；同一帧如果到期且数字变了，再从这里向上滚 d 格。
  * - d = 0：不动画，保持原地。
+ * refreshHz 只参与"这一段该滚多久"：1Hz 用 200 + 15d 的原值，10Hz / 60Hz 收窄到档位上限。
  */
 export function fracFrame(
   prev: FracMotion | null,
   digit: number,
   nowMs: number,
   due: boolean,
+  refreshHz: RefreshHz,
 ): FracMotion {
   if (prev === null) return settledAt(digit, nowMs);
   // 还在滚：不打断，进度继续推进。
-  if (fracProgress(prev, nowMs) < 1) return prev;
+  if (fracProgress(prev, nowMs, refreshHz) < 1) return prev;
 
   const base = prev.to % 10;
   const settled = prev.from === base && prev.to === base;
@@ -228,15 +241,18 @@ export function DigitCell({ pos, ref }: DigitCellProps) {
 interface FracCellProps {
   /** 小数第 fpos 位（1 = 十分位），只作为 DOM 上的 data-fpos 标记。 */
   fpos: number;
+  /** 这一位所在的跳动频率档位：决定单段滚动的时长上限（1000/refreshHz 的 90%）。 */
+  refreshHz: RefreshHz;
   ref?: Ref<FracCellHandle>;
 }
 
 /**
- * 一位小数数字：与整数位同一套滚条格子，规则换成"向上滚 d 格、时长 200 + 15d（上限 340ms）"。
+ * 一位小数数字：与整数位同一套滚条格子，规则换成"向上滚 d 格、时长 min(200 + 15d, 本档位上限)"。
+ * 1Hz 上限 900ms（等于不设限，仍是 215–335ms）；10Hz 上限 90ms；60Hz 下限兜到 60ms。
  * 静止时精确停在本位的整格上；滚动结束精确落在新整格并归一，无残差。
  * 同样没有 useState/setState：状态机在 ref 里，每帧最多写一次 transform。
  */
-export function FracCell({ fpos, ref }: FracCellProps) {
+export function FracCell({ fpos, refreshHz, ref }: FracCellProps) {
   const cellRef = useRef<HTMLSpanElement>(null);
   const trackRef = useRef<HTMLSpanElement>(null);
   const motionRef = useRef<FracMotion | null>(null);
@@ -254,15 +270,15 @@ export function FracCell({ fpos, ref }: FracCellProps) {
         }
         if (!visible) return;
 
-        const motion = fracFrame(motionRef.current, digit, nowMs, due);
+        const motion = fracFrame(motionRef.current, digit, nowMs, due, refreshHz);
         motionRef.current = motion;
-        const offset = (-fracIndexAt(motion, nowMs) * PITCH_EM).toFixed(5);
+        const offset = (-fracIndexAt(motion, nowMs, refreshHz) * PITCH_EM).toFixed(5);
         if (offset === lastOffsetRef.current) return;
         lastOffsetRef.current = offset;
         if (trackRef.current) trackRef.current.style.transform = `translate3d(0, ${offset}em, 0)`;
       },
     }),
-    [],
+    [refreshHz],
   );
 
   return (

@@ -48,8 +48,6 @@ interface ChoiceProps<T extends number | string> {
   options: readonly T[];
   value: T;
   error?: string;
-  /** 当前显示方式下这一档不生效时置灰（例如 roll 模式下的跳动频率）。 */
-  disabled?: boolean;
   hint?: string;
   format(option: T): string;
   onChange(value: T): void;
@@ -61,7 +59,6 @@ function Choice<T extends number | string>({
   options,
   value,
   error,
-  disabled = false,
   hint,
   format,
   onChange,
@@ -69,12 +66,7 @@ function Choice<T extends number | string>({
   return (
     <div className="settings-choice">
       <span className="settings-field-label">{label}</span>
-      <div
-        className={disabled ? "settings-segmented is-disabled" : "settings-segmented"}
-        role="group"
-        aria-label={label}
-        aria-disabled={disabled}
-      >
+      <div className="settings-segmented" role="group" aria-label={label}>
         {options.map((option) => {
           const active = option === value;
           return (
@@ -82,7 +74,6 @@ function Choice<T extends number | string>({
               key={option}
               type="button"
               aria-pressed={active}
-              disabled={disabled}
               className={active ? "settings-segment is-active" : "settings-segment"}
               onClick={() => onChange(option)}
             >
@@ -177,8 +168,11 @@ export function SettingsPanel({ open, initial, adapter, onClose, onSaved }: Sett
           options={REFRESH_HZ_OPTIONS}
           value={draft.refreshHz}
           error={errors.refreshHz}
-          disabled={draft.displayMode === "roll"}
-          hint={draft.displayMode === "roll" ? "机械滚动按每帧渲染，频率档位只在整串跳动时生效" : undefined}
+          hint={
+            draft.displayMode === "roll"
+              ? "小数滚动时长随频率自适应：1 Hz 每秒一段、10 Hz 每 100 ms 一段、60 Hz 首尾相接连续流动"
+              : "整串数字按此频率整片跳变，没有任何动画"
+          }
           format={(option) => `${option} Hz`}
           onChange={(value) => update("refreshHz", value)}
         />

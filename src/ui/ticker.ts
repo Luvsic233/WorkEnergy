@@ -101,7 +101,8 @@ export function startTicker(
         onFrame(computeFrame(settings, nowMs, decimals, true));
       }
     } else {
-      // 小数的变化检测走同一套 shouldRender 门限：1Hz 档位下 18 位小数每秒只启动一次滚动。
+      // 小数的变化检测走同一套 shouldRender 门限：每 1000/refreshHz 毫秒才启动一次滚动
+      // （默认 10Hz = 每 100ms 一拍，1Hz = 每秒一拍，60Hz = 每帧），动画本身仍然每帧推进。
       const textDue = shouldRender(nowMs, lastTextMs, refreshHz);
       if (textDue) lastTextMs = nowMs;
       onFrame(computeFrame(settings, nowMs, decimals, textDue));

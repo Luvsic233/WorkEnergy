@@ -258,25 +258,6 @@
   color: #eef2ff;
 }
 
-/* 当前显示方式下不生效的档位：整组置灰，鼠标指针也退出可点状态（button 的 disabled 已阻止点击）。 */
-.settings-segmented.is-disabled {
-  opacity: 0.42;
-}
-
-.settings-segment:disabled {
-  cursor: default;
-}
-
-.settings-segment:disabled:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  color: rgba(226, 232, 240, 0.72);
-}
-
-.settings-segment.is-active:disabled:hover {
-  border-color: rgba(82, 122, 255, 0.55);
-  color: #eef2ff;
-}
-
 .settings-hint {
   color: rgba(226, 232, 240, 0.42);
   font-size: 11px;
