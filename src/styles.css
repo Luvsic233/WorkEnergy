@@ -115,6 +115,23 @@ body {
   opacity: 0.55;
 }
 
+/*
+ * roll 模式：.dot 不能是普通行内盒。普通行内盒的基线在自身行盒里距盒底
+ * (line-height / 2 + (descent - ascent) / 2)，行高 normal 下约 0.23em；而小数格是被裁切的
+ * 0.8em 矮盒，字形基线几乎贴着自己的盒底。flex-end 只把盒底对齐，于是大字号的小数点会浮到
+ * 小数上方（宽档实测高出 6.6px）。
+ *
+ * 修法：让 .dot 用与 .digit 完全相同的盒构造（height = line-height = 0.8em），
+ * 两个盒"基线相对盒底"的偏移成了同一个表达式，盒底对齐即基线对齐；偏差随字号等比缩放，
+ * 三档窗口尺寸与三档小数位数都不需要额外常数。整数位的字号一点没动。
+ */
+.bar-value[data-mode="roll"] .dot {
+  display: inline-block;
+  align-self: flex-end;
+  height: 0.8em;
+  line-height: 0.8em;
+}
+
 .bar-value .frac {
   font-size: calc(17px * var(--bar-scale));
   font-weight: 500;
