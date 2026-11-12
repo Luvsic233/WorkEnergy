@@ -1,8 +1,18 @@
 /*
- * 外壳纪律：悬浮条窗口固定 400x120，页面任何一层都不许出现滚动条。
+ * 外壳纪律：悬浮条窗口尺寸由设置里的窗口尺寸档位（compact 300x80 / standard 360x96 /
+ * wide 400x120）决定，窗口改多大、条就多大；页面任何一层都不许出现滚动条。
  * html/body 一律 overflow: hidden（设置窗口需要滚动时由 .settings-window 自己滚，
  * 不去撑大文档，所以 documentElement 的 scrollWidth/Height 恒等于 clientWidth/Height）。
  */
+/*
+ * 内容缩放系数：由 bridge 的 applySizePreset 按档位写进 :root 的行内样式
+ * （compact 0.75 / standard 0.9 / wide 1）。这里的 0.75 只是兜底，
+ * 保证脚本没跑（例如服务端渲染、静态快照）时排版落在最小档而不会撑破窗口。
+ */
+:root {
+  --bar-scale: 0.75;
+}
+
 html,
 body,
 #root {
@@ -28,13 +38,14 @@ body {
   background: radial-gradient(60% 55% at 50% 38%, rgba(82, 122, 255, 0.18), rgba(0, 0, 0, 0) 72%);
 }
 
+/* 条始终铺满窗口（窗口尺寸就是档位尺寸），所以改窗口 = 改条，不存在留白或溢出。 */
 .bar {
   position: relative;
   box-sizing: border-box;
-  width: 400px;
-  height: 120px;
-  padding: 14px 22px 12px;
-  border-radius: 22px;
+  width: 100%;
+  height: 100%;
+  padding: calc(14px * var(--bar-scale)) calc(22px * var(--bar-scale)) calc(12px * var(--bar-scale));
+  border-radius: calc(22px * var(--bar-scale));
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(14, 16, 22, 0.62);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
@@ -48,8 +59,9 @@ body {
   font-feature-settings: "tnum" 1;
 }
 
+/* 字号一律写成 calc(基准px * var(--bar-scale))：换档就是整体等比缩放，滚动逻辑一行都不用动。 */
 .bar-label {
-  font-size: 12px;
+  font-size: calc(12px * var(--bar-scale));
   letter-spacing: 0.16em;
   color: rgba(226, 232, 240, 0.55);
 }
@@ -57,7 +69,7 @@ body {
 .bar-value {
   display: flex;
   align-items: baseline;
-  gap: 2px;
+  gap: calc(2px * var(--bar-scale));
   min-width: 0;
   white-space: nowrap;
 }
@@ -72,7 +84,7 @@ body {
 
 .bar-value .int,
 .bar-value .int-group {
-  font-size: 46px;
+  font-size: calc(46px * var(--bar-scale));
   font-weight: 650;
   letter-spacing: 0.5px;
 }
@@ -99,42 +111,43 @@ body {
 }
 
 .bar-value .dot {
-  font-size: 28px;
+  font-size: calc(28px * var(--bar-scale));
   opacity: 0.55;
 }
 
 .bar-value .frac {
-  font-size: 17px;
+  font-size: calc(17px * var(--bar-scale));
   font-weight: 500;
   color: rgba(160, 220, 255, 0.92);
 }
 
 /*
- * 小数区字号按档位自适应：条宽固定 400px（内容区 354px），18 位小数在 17px 下约 170px，
+ * 小数区字号按档位自适应：宽档条宽 400px（内容区 354px），18 位小数在 17px 下约 170px，
  * 叠加 6 位整数（46px 字号约 175px）必然溢出。按位数收窄小数区字号，保持整数区的主导地位，
  * 同时保证 18 位时不会有水平溢出或裁切（不淡化、不换行、不裁字）。
+ * 三档窗口尺寸共用这套比例：乘以 --bar-scale 后内容宽度与条宽同比例收缩，最紧的紧凑档余量最大。
  */
 .bar-value[data-decimals="18"] .frac,
 .bar-value[data-decimals="18"] .frac-group {
-  font-size: 13px;
+  font-size: calc(13px * var(--bar-scale));
 }
 
 .bar-value[data-decimals="12"] .frac,
 .bar-value[data-decimals="12"] .frac-group {
-  font-size: 16px;
+  font-size: calc(16px * var(--bar-scale));
 }
 
 .bar-value[data-decimals="6"] .frac,
 .bar-value[data-decimals="6"] .frac-group {
-  font-size: 17px;
+  font-size: calc(17px * var(--bar-scale));
 }
 
 /*
- * 18 位档的小数区有 18 位，整数区还必须容下 7 位（9999999 元）而不溢出 400px 条：
+ * 18 位档的小数区有 18 位，整数区还必须容下 7 位（9999999 元）而不溢出条：
  * 在 18 位档把整数区收到 40px，两级字号一起给最长的组合留出余量。
  */
 .bar-value[data-decimals="18"] .int-group {
-  font-size: 40px;
+  font-size: calc(40px * var(--bar-scale));
 }
 
 .bar-value .int-group {
@@ -189,15 +202,15 @@ body {
 }
 
 .bar-value .unit {
-  margin-left: 4px;
-  font-size: 12px;
+  margin-left: calc(4px * var(--bar-scale));
+  font-size: calc(12px * var(--bar-scale));
   color: rgba(226, 232, 240, 0.5);
 }
 
 .bar-foot {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: calc(12px * var(--bar-scale));
   color: rgba(226, 232, 240, 0.45);
 }
 
@@ -208,11 +221,11 @@ body {
  */
 .bar-close {
   position: absolute;
-  top: 6px;
-  right: 8px;
+  top: calc(6px * var(--bar-scale));
+  right: calc(8px * var(--bar-scale));
   z-index: 2;
-  width: 18px;
-  height: 18px;
+  width: calc(18px * var(--bar-scale));
+  height: calc(18px * var(--bar-scale));
   padding: 0;
   display: flex;
   align-items: center;
@@ -221,7 +234,7 @@ body {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.16);
   color: rgba(242, 244, 248, 0.92);
-  font-size: 13px;
+  font-size: calc(13px * var(--bar-scale));
   line-height: 1;
   cursor: pointer;
   opacity: 0;

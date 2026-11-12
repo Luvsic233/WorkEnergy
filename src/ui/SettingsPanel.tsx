@@ -6,6 +6,8 @@ import {
   DISPLAY_MODE_OPTIONS,
   hourlyAtoms,
   REFRESH_HZ_OPTIONS,
+  sizePresetSpec,
+  SIZE_PRESET_OPTIONS,
   validateInput,
   type RawInput,
 } from "../core/settings";
@@ -53,7 +55,7 @@ interface ChoiceProps<T extends number | string> {
   onChange(value: T): void;
 }
 
-/** 档位开关：显示方式 roll/jump、小数位数 18/12/6、跳动频率 60/10/1Hz，只写草稿，点保存才落盘。 */
+/** 档位开关：显示方式 roll/jump、小数位数 18/12/6、跳动频率 60/10/1Hz、窗口尺寸三档，只写草稿，点保存才落盘。 */
 function Choice<T extends number | string>({
   label,
   options,
@@ -175,6 +177,15 @@ export function SettingsPanel({ open, initial, adapter, onClose, onSaved }: Sett
           }
           format={(option) => `${option} Hz`}
           onChange={(value) => update("refreshHz", value)}
+        />
+        <Choice
+          label="窗口尺寸"
+          options={SIZE_PRESET_OPTIONS}
+          value={draft.sizePreset}
+          error={errors.sizePreset}
+          hint={`${sizePresetSpec(draft.sizePreset).width} × ${sizePresetSpec(draft.sizePreset).height} 逻辑像素（内容 ${sizePresetSpec(draft.sizePreset).scale} 倍），保存后立即生效，无需重启`}
+          format={(option) => sizePresetSpec(option).label}
+          onChange={(value) => update("sizePreset", value)}
         />
       </div>
 

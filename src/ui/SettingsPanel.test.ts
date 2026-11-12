@@ -65,6 +65,35 @@ describe("SettingsPanel：跳动频率三档在滚动模式下也可用", () => 
     expect(html).toContain("60 Hz 首尾相接连续流动");
   });
 
+  it("shows a 窗口尺寸 group next to 小数位数 and 跳动频率, compact active by default", () => {
+    const html = render();
+    const group = html.slice(html.indexOf('aria-label="窗口尺寸"'), html.indexOf('aria-label="窗口尺寸"') + 600);
+
+    expect(group).toContain(">紧凑<");
+    expect(group).toContain(">标准<");
+    expect(group).toContain(">宽松<");
+    expect(group).toMatch(/aria-pressed="true"[^>]*>紧凑</);
+    expect(group).not.toContain("disabled");
+    // 三档控件确实排在显示相关区域的同一组里（显示方式 / 小数位数 / 跳动频率 / 窗口尺寸）
+    const display = html.slice(html.indexOf('class="settings-display"'));
+    for (const label of ["显示方式", "小数位数", "跳动频率", "窗口尺寸"]) {
+      expect(display).toContain(`aria-label="${label}"`);
+    }
+    expect(display.indexOf("窗口尺寸")).toBeGreaterThan(display.indexOf("跳动频率"));
+  });
+
+  it("marks the stored tier active and states its pixel size", () => {
+    const standard = render({ ...DEFAULT_INPUT, sizePreset: "standard" });
+    expect(standard).toMatch(/aria-pressed="true"[^>]*>标准</);
+    expect(standard).toContain("360 × 96 逻辑像素");
+    // 不是被选中的那档不显示 aria-pressed="true"
+    expect(standard).not.toMatch(/aria-pressed="true"[^>]*>紧凑</);
+
+    const wide = render({ ...DEFAULT_INPUT, sizePreset: "wide" });
+    expect(wide).toMatch(/aria-pressed="true"[^>]*>宽松</);
+    expect(wide).toContain("400 × 120 逻辑像素");
+  });
+
   it("explains the jump tier instead of the roll tier once jump is selected", () => {
     const html = render({ ...DEFAULT_INPUT, displayMode: "jump" });
     expect(html).toContain("整串数字按此频率整片跳变，没有任何动画");

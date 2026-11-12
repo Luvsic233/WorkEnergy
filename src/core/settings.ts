@@ -10,6 +10,38 @@ export type RefreshHz = 60 | 10 | 1;
 /** 跳动频率可选档位，面板按此顺序渲染。 */
 export const REFRESH_HZ_OPTIONS: readonly RefreshHz[] = [60, 10, 1];
 
+/** 窗口尺寸档位：无边框悬浮条整体缩小 / 放大，窗口逻辑尺寸与内容缩放系数成对变化。 */
+export type SizePreset = "compact" | "standard" | "wide";
+
+/** 一档窗口尺寸：逻辑像素窗口大小 + 内容缩放系数（字号与间距统一乘这个系数）。 */
+export interface SizePresetSpec {
+  /** 窗口逻辑宽度（px）。 */
+  width: number;
+  /** 窗口逻辑高度（px）。 */
+  height: number;
+  /** 内容缩放系数：1 = 宽松档（400x120 的原始排版）。 */
+  scale: number;
+  /** 面板上的档位名。 */
+  label: string;
+}
+
+/** 三档定义（唯一事实来源）：窗口尺寸与缩放系数在这里成对给出，CSS 只消费 --bar-scale。 */
+export const SIZE_PRESETS: Readonly<Record<SizePreset, SizePresetSpec>> = {
+  compact: { width: 300, height: 80, scale: 0.75, label: "紧凑" },
+  standard: { width: 360, height: 96, scale: 0.9, label: "标准" },
+  wide: { width: 400, height: 120, scale: 1, label: "宽松" },
+};
+
+/** 窗口尺寸可选档位，面板按此顺序渲染，白名单与之一致；第一档就是默认档。 */
+export const SIZE_PRESET_OPTIONS: readonly SizePreset[] = ["compact", "standard", "wide"];
+
+export const DEFAULT_SIZE_PRESET: SizePreset = "compact";
+
+/** 档位 → 尺寸 / 缩放系数；未登记的档位（手改存储、老版本）回落默认档而不是抛错。 */
+export function sizePresetSpec(preset: SizePreset): SizePresetSpec {
+  return SIZE_PRESETS[preset] ?? SIZE_PRESETS[DEFAULT_SIZE_PRESET];
+}
+
 /**
  * 金额区的显示方式：
  * - roll：整数位常态精确停在该位的整格上，只有这一位数值变化时才用 260ms 快速滚过一格
@@ -39,6 +71,8 @@ export interface RawInput {
   refreshHz: RefreshHz;
   /** 金额区显示方式，默认 roll（整数精确落位 + 变化时快速滚一格，小数按 refreshHz 跳）。 */
   displayMode: DisplayMode;
+  /** 窗口尺寸档位，默认 compact（300x80 / 0.75 倍内容缩放）。 */
+  sizePreset: SizePreset;
 }
 
 export const DEFAULT_INPUT: RawInput = {
@@ -54,6 +88,7 @@ export const DEFAULT_INPUT: RawInput = {
   decimals: DEFAULT_DECIMALS,
   refreshHz: 10,
   displayMode: "roll",
+  sizePreset: DEFAULT_SIZE_PRESET,
 };
 
 /** 校验会报错的字段（开关本身不会报错）。 */
@@ -67,7 +102,8 @@ export type InputField =
   | "lunchEnd"
   | "decimals"
   | "refreshHz"
-  | "displayMode";
+  | "displayMode"
+  | "sizePreset";
 
 export type FieldErrors = Partial<Record<InputField, string>>;
 
@@ -139,6 +175,9 @@ export function validateInput(input: RawInput): ValidationResult {
 
   const displayMode = choiceError("显示方式", DISPLAY_MODE_OPTIONS, input.displayMode);
   if (displayMode) errors.displayMode = displayMode;
+
+  const sizePreset = choiceError("窗口尺寸", SIZE_PRESET_OPTIONS, input.sizePreset);
+  if (sizePreset) errors.sizePreset = sizePreset;
 
   const startError = clockError("上班时间", input.workStart);
   if (startError) errors.workStart = startError;

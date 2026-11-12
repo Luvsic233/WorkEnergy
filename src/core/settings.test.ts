@@ -4,15 +4,20 @@ import { formatAtoms, type Decimals } from "./format";
 import {
   DECIMALS_OPTIONS,
   DEFAULT_INPUT,
+  DEFAULT_SIZE_PRESET,
   DISPLAY_MODE_OPTIONS,
   hourlyAtoms,
   ONE_HOUR_MS,
   REFRESH_HZ_OPTIONS,
+  SIZE_PRESET_OPTIONS,
+  SIZE_PRESETS,
+  sizePresetSpec,
   toSettings,
   validateInput,
   type DisplayMode,
   type RawInput,
   type RefreshHz,
+  type SizePreset,
 } from "./settings";
 
 describe("DEFAULT_INPUT", () => {
@@ -30,6 +35,7 @@ describe("DEFAULT_INPUT", () => {
       decimals: 18,
       refreshHz: 10,
       displayMode: "roll",
+      sizePreset: "compact",
     });
   });
 
@@ -250,6 +256,95 @@ describe("display tiers: decimals + refreshHz", () => {
 
   it("keeps the display tiers out of the frozen Settings contract", () => {
     const settings = toSettings({ ...DEFAULT_INPUT, decimals: 6, refreshHz: 1 });
+    expect(Object.keys(settings).sort()).toEqual([
+      "hoursMicro",
+      "lunchEndMin",
+      "lunchStartMin",
+      "overtimeMode",
+      "payDaysMicro",
+      "salaryMicro",
+      "workEndMin",
+      "workStartMin",
+    ]);
+  });
+});
+
+describe("窗口尺寸三档：逻辑像素 + 内容缩放系数", () => {
+  it("maps compact / standard / wide onto 300x80 / 360x96 / 400x120 and .75 / .9 / 1", () => {
+    expect(SIZE_PRESETS).toEqual({
+      compact: { width: 300, height: 80, scale: 0.75, label: "紧凑" },
+      standard: { width: 360, height: 96, scale: 0.9, label: "标准" },
+      wide: { width: 400, height: 120, scale: 1, label: "宽松" },
+    });
+    // 宽档就是改造前的老尺寸、老排版，缩放系数必须是 1，否则老用户体验会整体缩水
+    expect(SIZE_PRESETS.wide.scale).toBe(1);
+    expect(SIZE_PRESETS.wide.width).toBe(400);
+    expect(SIZE_PRESETS.wide.height).toBe(120);
+  });
+
+  it("offers the tiers in panel order, smallest first, with compact as the default", () => {
+    expect(SIZE_PRESET_OPTIONS).toEqual(["compact", "standard", "wide"]);
+    expect(DEFAULT_SIZE_PRESET).toBe("compact");
+    expect(DEFAULT_INPUT.sizePreset).toBe("compact");
+    expect(SIZE_PRESET_OPTIONS[0]).toBe(DEFAULT_SIZE_PRESET);
+  });
+
+  it("scales window width and content by the same factor, so every tier keeps its slack", () => {
+    // 缩放系数 = 窗口宽度 / 400：内容宽度与条宽同比例收缩，三档的余量比例因此是一样的
+    for (const preset of SIZE_PRESET_OPTIONS) {
+      const spec = sizePresetSpec(preset);
+      expect(spec.scale).toBeCloseTo(spec.width / SIZE_PRESETS.wide.width, 10);
+      expect(spec.scale).toBeGreaterThan(0);
+      expect(spec.scale).toBeLessThanOrEqual(1);
+      // 窗口高度必须放得下三行内容（标签 / 数字 / 阶段行）等比缩放后的高度，
+      // 宽档 120px 内容约 74px，所以任何一档的高度 / 缩放系数都不该低于 99px 的等效高度
+      expect(spec.height / spec.scale).toBeGreaterThan(96);
+    }
+  });
+
+  it("grows strictly from compact to standard to wide", () => {
+    const tiers = SIZE_PRESET_OPTIONS.map((preset) => sizePresetSpec(preset));
+    for (let index = 1; index < tiers.length; index += 1) {
+      expect(tiers[index].width).toBeGreaterThan(tiers[index - 1].width);
+      expect(tiers[index].height).toBeGreaterThan(tiers[index - 1].height);
+      expect(tiers[index].scale).toBeGreaterThan(tiers[index - 1].scale);
+    }
+  });
+
+  it("resolves every offered tier and falls back to compact for an unregistered one", () => {
+    for (const preset of SIZE_PRESET_OPTIONS) {
+      expect(sizePresetSpec(preset)).toBe(SIZE_PRESETS[preset]);
+    }
+    expect(sizePresetSpec("huge" as unknown as SizePreset)).toEqual(SIZE_PRESETS.compact);
+  });
+
+  it("accepts all three tiers without touching the earning contract", () => {
+    for (const sizePreset of SIZE_PRESET_OPTIONS) {
+      const result = validateInput({ ...DEFAULT_INPUT, sizePreset });
+      expect(result.errors).toEqual({});
+      expect(result.settings).toEqual(toSettings(DEFAULT_INPUT));
+    }
+  });
+
+  it("rejects any tier the panel never offers", () => {
+    for (const bad of ["huge", "", "Compact", "COMPACT", "small", "0"]) {
+      const result = validateInput({ ...DEFAULT_INPUT, sizePreset: bad as unknown as SizePreset });
+      expect(result.errors.sizePreset).toBe("窗口尺寸只能是 compact / standard / wide");
+      expect(result.settings).toBeNull();
+    }
+  });
+
+  it("reports a broken size preset next to the other broken fields", () => {
+    const broken: RawInput = {
+      ...DEFAULT_INPUT,
+      salary: "0",
+      sizePreset: "huge" as unknown as SizePreset,
+    };
+    expect(Object.keys(validateInput(broken).errors).sort()).toEqual(["salary", "sizePreset"]);
+  });
+
+  it("keeps the size preset out of the frozen Settings contract", () => {
+    const settings = toSettings({ ...DEFAULT_INPUT, sizePreset: "wide" });
     expect(Object.keys(settings).sort()).toEqual([
       "hoursMicro",
       "lunchEndMin",

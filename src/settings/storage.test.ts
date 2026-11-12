@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_INPUT } from "../core/settings";
-import { createAdapter, localStorageAdapter, normalizeRawInput, parseStored, STORAGE_KEY, type KeyValueStore } from "./storage";
+import {
+  createAdapter,
+  localStorageAdapter,
+  normalizeRawInput,
+  parseStored,
+  readStoredSizePreset,
+  STORAGE_KEY,
+  type KeyValueStore,
+} from "./storage";
 
 function memoryStore(): KeyValueStore & { data: Map<string, string> } {
   const data = new Map<string, string>();
@@ -141,5 +149,47 @@ describe("storage of the display mode", () => {
   it("keeps an explicitly stored roll or jump", () => {
     expect(normalizeRawInput({ displayMode: "roll" })).toMatchObject({ displayMode: "roll" });
     expect(normalizeRawInput({ displayMode: "jump" })).toMatchObject({ displayMode: "jump" });
+  });
+});
+
+describe("storage of the window size preset", () => {
+  it("round-trips the size preset through the store", async () => {
+    const store = memoryStore();
+    const adapter = createAdapter(() => store);
+    const saved = { ...DEFAULT_INPUT, sizePreset: "standard" as const };
+
+    await adapter.save(saved);
+
+    expect(JSON.parse(store.data.get(STORAGE_KEY) as string)).toMatchObject({ sizePreset: "standard" });
+    expect(await adapter.load()).toEqual(saved);
+  });
+
+  it("keeps every whitelisted tier and its own default", () => {
+    for (const sizePreset of ["compact", "standard", "wide"] as const) {
+      expect(normalizeRawInput({ sizePreset })).toMatchObject({ sizePreset });
+    }
+  });
+
+  it("falls back to compact for a legacy record without the size preset", async () => {
+    const store = memoryStore();
+    store.data.set(STORAGE_KEY, JSON.stringify({ salary: "15000" }));
+
+    const loaded = await createAdapter(() => store).load();
+    expect(loaded?.sizePreset).toBe("compact");
+    expect(normalizeRawInput({ salary: "15000" })).toMatchObject({ sizePreset: "compact" });
+    expect(normalizeRawInput({})).toMatchObject({ sizePreset: "compact" });
+  });
+
+  it("rejects stored sizes the panel never offers", () => {
+    for (const bad of ["huge", "Compact", "", "small", 300, true, null]) {
+      expect(normalizeRawInput({ sizePreset: bad })).toMatchObject({ sizePreset: "compact" });
+    }
+    expect(parseStored(JSON.stringify({ sizePreset: "wide" }))).toMatchObject({ sizePreset: "wide" });
+    expect(parseStored(JSON.stringify({ sizePreset: "big" }))).toMatchObject({ sizePreset: "compact" });
+  });
+
+  it("reads the preset synchronously at startup, degrading to compact without storage", () => {
+    // node 环境没有 localStorage：同步读必须回落默认档而不是抛错
+    expect(readStoredSizePreset()).toBe("compact");
   });
 });

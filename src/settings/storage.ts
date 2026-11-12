@@ -3,9 +3,11 @@ import {
   DEFAULT_INPUT,
   DISPLAY_MODE_OPTIONS,
   REFRESH_HZ_OPTIONS,
+  SIZE_PRESET_OPTIONS,
   type DisplayMode,
   type RawInput,
   type RefreshHz,
+  type SizePreset,
 } from "../core/settings";
 import type { Decimals } from "../core/format";
 
@@ -67,6 +69,7 @@ export function normalizeRawInput(value: unknown): RawInput | null {
     decimals: option<Decimals>(record, "decimals", DECIMALS_OPTIONS, DEFAULT_INPUT.decimals),
     refreshHz: option<RefreshHz>(record, "refreshHz", REFRESH_HZ_OPTIONS, DEFAULT_INPUT.refreshHz),
     displayMode: option<DisplayMode>(record, "displayMode", DISPLAY_MODE_OPTIONS, DEFAULT_INPUT.displayMode),
+    sizePreset: option<SizePreset>(record, "sizePreset", SIZE_PRESET_OPTIONS, DEFAULT_INPUT.sizePreset),
   };
 }
 
@@ -101,3 +104,13 @@ function browserStore(): KeyValueStore | null {
 }
 
 export const localStorageAdapter: StorageAdapter = createAdapter(browserStore);
+
+/**
+ * 同步读窗口尺寸档位：首帧前就要把字号与窗口调到目标档，等不到 async 适配器。
+ * 没有存储 / 记录损坏 / 档位非法时一律回落默认档（compact），保证起步就是最小排版。
+ */
+export function readStoredSizePreset(): SizePreset {
+  const raw = browserStore()?.getItem(STORAGE_KEY) ?? null;
+  if (raw === null) return DEFAULT_INPUT.sizePreset;
+  return parseStored(raw)?.sizePreset ?? DEFAULT_INPUT.sizePreset;
+}
