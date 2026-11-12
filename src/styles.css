@@ -121,8 +121,8 @@ body {
  * 0.8em 矮盒，字形基线几乎贴着自己的盒底。flex-end 只把盒底对齐，于是大字号的小数点会浮到
  * 小数上方（宽档实测高出 6.6px）。
  *
- * 修法：让 .dot 用与 .digit 完全相同的盒构造（height = line-height = 0.8em），
- * 两个盒"基线相对盒底"的偏移成了同一个表达式，盒底对齐即基线对齐；偏差随字号等比缩放，
+ * 修法：让 .dot 用与 .digit-glyph 完全相同的盒构造（0.8em 盒 + text-box 裁到墨迹高度 + 居中），
+ * 两个盒"圆点相对盒底"的偏移成了同一个表达式，盒底对齐即圆点对齐；偏差随字号等比缩放，
  * 三档窗口尺寸与三档小数位数都不需要额外常数。整数位的字号一点没动。
  */
 .bar-value[data-mode="roll"] .dot {
@@ -130,6 +130,13 @@ body {
   align-self: flex-end;
   height: 0.8em;
   line-height: 0.8em;
+}
+
+@supports (text-box: trim-both cap alphabetic) {
+  .bar-value[data-mode="roll"] .dot {
+    align-content: center;
+    text-box: trim-both cap alphabetic;
+  }
 }
 
 .bar-value .frac {
@@ -210,12 +217,43 @@ body {
   transform: translate3d(0, 0, 0);
 }
 
+/*
+ * 一位数字的字形盒：自成一个裁切盒 + 盒内垂直居中，墨迹不许越出自己的 0.8em。
+ *
+ * 旧写法（display: block + height/line-height = 0.8em）靠 baseline 排版：Segoe UI 的行盒
+ * 内容高度是 1.333em，负半行距把基线顶到盒底，cap 高度 0.7em 的墨迹于是"贴"在下边沿上
+ * （盒内实测 3px..24px，下边沿 0 余量）；基线正好落在格与格的分界线上，抗锯齿残边于是溢出
+ * 自己的盒子渗进下一格，在静止的整数格顶部留下一条白线（8 倍截图证据：格顶第 1 行有
+ * 16 个非背景像素）。
+ *
+ * 改法：字形盒自成一个裁切盒（overflow: hidden），再用 text-box 把行盒裁到墨迹高度、盒内
+ * 垂直居中（见下面的 @supports），墨迹上下各留约 0.05em，分界线两侧都有留白，邻格墨迹再也
+ * 渗不进来；裁切盒保证任何残边都出不了自己的 0.8em。text-box 不被支持时退化成原来的行盒
+ * 位置（居中无效），overflow 仍然生效，白线同样消失。格高仍是 0.8em，与 RollingDigit 的
+ * PITCH_EM 一致，位移与进位逻辑一行没动。
+ */
 .bar-value .digit-glyph {
   display: block;
-  /* 行盒与格高相同：墨迹在格内居中，上下各留约 0.05em 的余量，正好不切字。 */
   height: 0.8em;
   line-height: 0.8em;
   text-align: center;
+  overflow: hidden;
+}
+
+/*
+ * 支持 text-box（Chromium 133+，WebView2 同代）时再补一步：把行盒裁到墨迹的高度，
+ * 再把这段墨迹在 0.8em 格里垂直居中 —— 0.7em 的墨迹上下各留 0.05em，分界线两侧都有留白，
+ * 邻格墨迹再也渗不进来，字也没被切。实测（300×80、dsf=4、字号 30px）：墨迹落在格内
+ * 第 8..92 行（共 96 行），格顶两行与格底两行都是纯背景。
+ *
+ * @supports 也挡住了更老的引擎：那些引擎只走上面的 block 规则，位置与旧版逐像素一致，
+ * 白线由 overflow 单独擦掉（实测格顶两行同样归零，字一个像素都没少）。
+ */
+@supports (text-box: trim-both cap alphabetic) {
+  .bar-value .digit-glyph {
+    align-content: center;
+    text-box: trim-both cap alphabetic;
+  }
 }
 
 .bar-value .unit {

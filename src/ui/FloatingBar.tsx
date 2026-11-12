@@ -24,8 +24,8 @@ export interface RollingIntHandle {
 }
 
 export interface RollingFracHandle {
-  /** 逐帧把每一位小数推到它该停的整格；只有 due 帧才检测变化并启动滚动。 */
-  paint(columns: DigitColumn[], nowMs: number, due: boolean): void;
+  /** 逐帧把每一位小数推到它的连续位置（digit + progress）：没有门限，每帧都推进。 */
+  paint(columns: DigitColumn[]): void;
 }
 
 interface RollingIntProps {
@@ -69,22 +69,23 @@ function RollingInt({ ref }: RollingIntProps) {
 interface RollingFracProps {
   /** 小数位数档位：格子数跟着档位走（18 / 12 / 6）。 */
   decimals: Decimals;
-  /** 跳动频率档位：既决定拍子（哪一帧才检测变化），也决定单段滚动的时长上限。 */
-  refreshHz: RefreshHz;
   ref?: Ref<RollingFracHandle>;
 }
 
-/** 小数区：每位一个滚条格子，向后代换的是"向上滚 d 格"而不是整片跳文本。 */
-function RollingFrac({ decimals, refreshHz, ref }: RollingFracProps) {
+/**
+ * 小数区：每位一个滚条格子，位移由 {digit, progress} 连续算出。
+ * 一圈滚条后面永远是下一格，所以这一排读起来是一条不停向下流的尾巴，而不是"滚一段停一拍"。
+ */
+function RollingFrac({ decimals, ref }: RollingFracProps) {
   const handles = useRef<(FracCellHandle | null)[]>([]);
 
   useImperativeHandle(
     ref,
     () => ({
-      paint(columns, nowMs, due) {
+      paint(columns) {
         for (let index = 0; index < handles.current.length; index += 1) {
           const column = columns[index];
-          handles.current[index]?.paint(column?.digit ?? 0, nowMs, column !== undefined, due);
+          handles.current[index]?.paint(column ?? { digit: 0, progress: 0 }, column !== undefined);
         }
       },
     }),
@@ -97,7 +98,6 @@ function RollingFrac({ decimals, refreshHz, ref }: RollingFracProps) {
         <FracCell
           key={index}
           fpos={index + 1}
-          refreshHz={refreshHz}
           ref={(handle) => {
             handles.current[index] = handle;
           }}
@@ -110,7 +110,7 @@ function RollingFrac({ decimals, refreshHz, ref }: RollingFracProps) {
 interface FloatingBarProps {
   settings: Settings;
   decimals?: Decimals;
-  /** 跳动频率档位（默认 10Hz）：roll 模式决定小数滚动的拍子与时长，jump 模式决定整串跳变频率。 */
+  /** 跳动频率档位（默认 10Hz）：只决定 jump 模式整串跳变的频率，roll 模式不看它。 */
   refreshHz?: RefreshHz;
   displayMode?: DisplayMode;
   now?: () => number;
@@ -140,12 +140,12 @@ export function FloatingBar({
     return startTicker(
       host,
       settings,
-      ({ money, phase, columns, textDue, nowMs }) => {
+      ({ money, phase, columns, nowMs }) => {
         if (displayMode === "roll") {
           // 整数：每位推到整格，数值变化时由进位状态机自己滚一格。
           rollerRef.current?.paint(columns, nowMs);
-          // 小数：同样是格子，但只在 textDue（refreshHz 到期）的帧上检测变化并启动一次向上滚动。
-          fracRollerRef.current?.paint(columns.frac, nowMs, textDue);
+          // 小数：每帧都按 atoms 的真实连续进度（digit + progress）推进，没有任何门限。
+          fracRollerRef.current?.paint(columns.frac);
         } else {
           // jump：整数与小数一起按 refreshHz 整片跳，没有任何动画。
           if (intRef.current) intRef.current.textContent = money.int;
@@ -189,7 +189,7 @@ export function FloatingBar({
         {displayMode === "roll" ? <RollingInt ref={rollerRef} /> : <span className="int" ref={intRef}>0</span>}
         <span className="dot">.</span>
         {displayMode === "roll" ? (
-          <RollingFrac decimals={decimals} refreshHz={refreshHz} ref={fracRollerRef} />
+          <RollingFrac decimals={decimals} ref={fracRollerRef} />
         ) : (
           <span className="frac" ref={fracRef}>
             {"0".repeat(decimals)}

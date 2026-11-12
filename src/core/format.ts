@@ -35,8 +35,9 @@ export function formatAtoms(atoms: bigint, decimals: Decimals = DEFAULT_DECIMALS
 
 /**
  * 一位数字的状态：digit 是这一位当前的数字，progress 是它向下一数字滚进的进度。
- * 现在的渲染器只用 digit（整数位每帧精确落在 -digit × 一格的整格上，绝不长时间停在半格），
- * progress 仍按契约输出：它随时可用，也仍然是"金额只由 BigInt 推导"这一契约的组成部分。
+ * 整数位只用 digit（每帧精确落在 -digit × 一格的整格上，绝不长时间停在半格）；
+ * 小数位用 digit + progress 算连续位移（见 RollingDigit 的 fracOffsetEm），
+ * 因此"小数一直匀速滚下去"这件事完全由 BigInt 拆位决定，不经过任何浮点累加。
  */
 export interface DigitColumn {
   digit: number;
@@ -57,7 +58,7 @@ const PROGRESS_SCALE = 1_000_000n;
  * progress 只取 6 位小数（微单位），既够 60fps 的位移精度，又保证 Number 转换精确无损；
  * 它是"这一位滚到下一数字的进度"，只有动画用它，金额本身从不经过浮点。
  */
-function columnAt(abs: bigint, exponent: number): DigitColumn {
+export function digitColumnAt(abs: bigint, exponent: number): DigitColumn {
   const unit = 10n ** BigInt(exponent);
   return {
     digit: Number((abs / unit) % 10n),
@@ -76,10 +77,10 @@ export function digitColumns(atoms: bigint, decimals: Decimals = DEFAULT_DECIMAL
   const intCount = Math.max(1, (abs / ATOMS_PER_YUAN).toString().length);
 
   const int: DigitColumn[] = [];
-  for (let k = intCount - 1; k >= 0; k -= 1) int.push(columnAt(abs, 18 + k));
+  for (let k = intCount - 1; k >= 0; k -= 1) int.push(digitColumnAt(abs, 18 + k));
 
   const frac: DigitColumn[] = [];
-  for (let d = 1; d <= decimals; d += 1) frac.push(columnAt(abs, 18 - d));
+  for (let d = 1; d <= decimals; d += 1) frac.push(digitColumnAt(abs, 18 - d));
 
   return { int, frac };
 }

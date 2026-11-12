@@ -51,6 +51,8 @@ interface ChoiceProps<T extends number | string> {
   value: T;
   error?: string;
   hint?: string;
+  /** 当前显示方式下这一组档位不起作用时置灰：值仍然显示，但点不动。 */
+  disabled?: boolean;
   format(option: T): string;
   onChange(value: T): void;
 }
@@ -62,13 +64,20 @@ function Choice<T extends number | string>({
   value,
   error,
   hint,
+  disabled = false,
   format,
   onChange,
 }: ChoiceProps<T>) {
   return (
-    <div className="settings-choice">
+    <div className={disabled ? "settings-choice is-disabled" : "settings-choice"}>
       <span className="settings-field-label">{label}</span>
-      <div className="settings-segmented" role="group" aria-label={label}>
+      <div
+        className="settings-segmented"
+        role="group"
+        aria-label={label}
+        // 只有在真的禁用时才输出 aria-disabled：false 也会渲染成字符串，读起来像"被禁了"。
+        aria-disabled={disabled ? "true" : undefined}
+      >
         {options.map((option) => {
           const active = option === value;
           return (
@@ -76,6 +85,8 @@ function Choice<T extends number | string>({
               key={option}
               type="button"
               aria-pressed={active}
+              aria-disabled={disabled ? "true" : undefined}
+              disabled={disabled}
               className={active ? "settings-segment is-active" : "settings-segment"}
               onClick={() => onChange(option)}
             >
@@ -170,9 +181,11 @@ export function SettingsPanel({ open, initial, adapter, onClose, onSaved }: Sett
           options={REFRESH_HZ_OPTIONS}
           value={draft.refreshHz}
           error={errors.refreshHz}
+          // roll：小数是连续滚动，没有"多久跳一次"这回事，这一组档位对它不起作用，置灰并把话说清楚。
+          disabled={draft.displayMode === "roll"}
           hint={
             draft.displayMode === "roll"
-              ? "小数滚动时长随频率自适应：1 Hz 每秒一段、10 Hz 每 100 ms 一段、60 Hz 首尾相接连续流动"
+              ? "滚动模式下小数连续滚动，频率档位只影响跳跃模式"
               : "整串数字按此频率整片跳变，没有任何动画"
           }
           format={(option) => `${option} Hz`}
