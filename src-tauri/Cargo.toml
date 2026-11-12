@@ -1,6 +1,6 @@
 [package]
 name = "work-energy"
-version = "0.2.1"
+version = "0.2.2"
 description = "Work Energy desktop shell"
 edition = "2021"
 rust-version = "1.77.2"
