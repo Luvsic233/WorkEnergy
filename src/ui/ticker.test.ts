@@ -249,3 +249,68 @@ describe("shouldRender", () => {
     expect(nextDeadline(1_000, 60)).toBe(1_000);
   });
 });
+
+describe("textDue：小数文本的跳变门限", () => {
+  it("pushes every frame in roll mode but only marks the text due at 1Hz", () => {
+    const bench = harness(at(10, 0), 16);
+    startTicker(bench.host, settings, record(bench), { refreshHz: 1, displayMode: "roll" });
+
+    bench.run(750); // 12000ms
+
+    expect(bench.frames).toHaveLength(750); // 整数位的进位动画每帧都要能推进
+    const dues = bench.frames.filter((frame) => frame.textDue);
+    expect(dues).toHaveLength(12); // 12000ms / 1000ms，不是每帧
+    const stamps = dues.map((frame) => frame.nowMs);
+    for (let index = 1; index < stamps.length; index += 1) {
+      expect(stamps[index] - stamps[index - 1]).toBeGreaterThanOrEqual(1000);
+    }
+  });
+
+  it("repaints the text three times in three seconds at 1Hz", () => {
+    const bench = harness(at(10, 0), 16);
+    startTicker(bench.host, settings, record(bench), { refreshHz: 1, displayMode: "roll" });
+
+    bench.run(188); // 3008ms
+
+    expect(bench.frames.filter((frame) => frame.textDue)).toHaveLength(3);
+  });
+
+  it("hands every frame the wall clock for the carry animation", () => {
+    const bench = harness(at(10, 0), 16);
+    startTicker(bench.host, settings, record(bench), { displayMode: "roll" });
+
+    bench.run(5);
+
+    for (let index = 0; index < bench.frames.length; index += 1) {
+      expect(bench.frames[index].nowMs).toBe(bench.stamps[index]);
+    }
+  });
+
+  it("makes every painted jump frame text-due and keeps the frame count at the tier", () => {
+    const bench = harness(at(10, 0), 16);
+    startTicker(bench.host, settings, record(bench), { refreshHz: 1, displayMode: "jump" });
+
+    bench.run(750);
+
+    expect(bench.frames).toHaveLength(12);
+    expect(bench.frames.every((frame) => frame.textDue)).toBe(true);
+  });
+
+  it("differs between roll and jump on the very same tier: 750 frames vs 12", () => {
+    const roll = harness(at(10, 0), 16);
+    startTicker(roll.host, settings, record(roll), { refreshHz: 1, displayMode: "roll" });
+    const jump = harness(at(10, 0), 16);
+    startTicker(jump.host, settings, record(jump), { refreshHz: 1, displayMode: "jump" });
+
+    roll.run(750);
+    jump.run(750);
+
+    expect(roll.frames).toHaveLength(750);
+    expect(jump.frames).toHaveLength(12);
+    expect(roll.frames.filter((frame) => frame.textDue)).toHaveLength(12);
+    // 两种模式看到的小数文本序列一致：roll 只是把跳变包在每帧推进的整数位移里
+    expect(roll.frames.filter((frame) => frame.textDue).map((frame) => frame.money)).toEqual(
+      jump.frames.map((frame) => frame.money),
+    );
+  });
+});

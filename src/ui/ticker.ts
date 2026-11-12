@@ -18,18 +18,23 @@ export interface TickerHost {
 export interface TickerFrame {
   money: MoneyParts;
   phase: Phase;
-  /** 每一位的 {digit, progress}；roll 模式拿它写滚条位移，jump 模式只要 money。 */
+  /** 每一位的 {digit, progress}；整数区只用 digit（滚轮已取消），progress 仍是引擎契约的一部分。 */
   columns: DigitColumns;
+  /** 这一帧的挂钟时刻（ms）：整数位的进位动画以它为时钟，组件不自己读 Date.now。 */
+  nowMs: number;
+  /** 文本改期门限：为 true 时这一帧才允许写小数文本（roll 模式）或整串文本（jump 模式）。 */
+  textDue: boolean;
 }
 
 export interface TickerOptions {
-  /** DOM 重绘频率档位；省略时按每帧重绘（既有调用方的契约），产品默认档由设置面板传入。 */
+  /** 文本改期的档位（小数跳变频率）；省略时每帧都到期（既有调用方的契约）。 */
   refreshHz?: RefreshHz;
-  /** 小数位数档位，默认 12 位。 */
+  /** 小数位数档位，默认 18 位。 */
   decimals?: Decimals;
   /**
-   * 显示方式，默认 roll：每帧都推进滚条，此时 refreshHz 不生效。
-   * jump 时沿用 refreshHz 节流，整串数字按档位整跳。
+   * 显示方式，默认 roll：
+   * - roll：整数位每帧都会被推到整格（数值变化时自己滚一格）；小数不是滚轮，只按 refreshHz 整片跳变。
+   * - jump：没有动画，整数与小数一起按 refreshHz 整片跳变，此时 onFrame 只在到期的帧上被调用。
    */
   displayMode?: DisplayMode;
 }
@@ -52,13 +57,20 @@ export function shouldRender(nowMs: number, lastMs: number | null, refreshHz: Re
 }
 
 /** 数值按毫秒精确计算（不受节流影响），只有 DOM 写入被 startTicker 控制节奏。 */
-export function computeFrame(settings: Settings, nowMs: number, decimals: Decimals = DEFAULT_DECIMALS): TickerFrame {
+export function computeFrame(
+  settings: Settings,
+  nowMs: number,
+  decimals: Decimals = DEFAULT_DECIMALS,
+  textDue = true,
+): TickerFrame {
   const atoms = earnedAtoms(settings, paidMsOf(settings, nowMs));
   return {
     money: formatAtoms(atoms, decimals),
     phase: phaseOf(settings, nowMs),
-    // 滚条位移的原料：同一份 atoms 用 BigInt 拆位，金额本身不经过浮点。
+    // 数字原料：同一份 atoms 用 BigInt 拆位，金额本身不经过浮点。
     columns: digitColumns(atoms, decimals),
+    nowMs,
+    textDue,
   };
 }
 
@@ -73,15 +85,23 @@ export function startTicker(
   const displayMode = options.displayMode ?? "roll";
   let handle = 0;
   let stopped = false;
-  let lastMs: number | null = null;
+  // jump：整帧门限；roll：只门限文本（整数进位动画必须每帧都能推进）。
+  let lastFrameMs: number | null = null;
+  let lastTextMs: number | null = null;
 
   const step = () => {
     if (stopped) return;
     const nowMs = host.now();
-    // roll：每帧都画（刷新档位不参与判断，丝滑来自 60fps 的逐帧位移）；jump：按档位整跳。
-    if (displayMode === "roll" || shouldRender(nowMs, lastMs, refreshHz)) {
-      lastMs = nowMs;
-      onFrame(computeFrame(settings, nowMs, decimals));
+    if (displayMode === "jump") {
+      if (shouldRender(nowMs, lastFrameMs, refreshHz)) {
+        lastFrameMs = nowMs;
+        onFrame(computeFrame(settings, nowMs, decimals, true));
+      }
+    } else {
+      // 小数文本走同一套 shouldRender 门限：1Hz 档位下 18 位小数每秒只重写一次。
+      const textDue = shouldRender(nowMs, lastTextMs, refreshHz);
+      if (textDue) lastTextMs = nowMs;
+      onFrame(computeFrame(settings, nowMs, decimals, textDue));
     }
     handle = host.schedule(step);
   };

@@ -183,3 +183,32 @@ describe("digitColumns: 每一位的 {digit, progress}", () => {
     }
   });
 });
+
+describe("digitColumns: 渲染契约（整数位只认 digit）", () => {
+  it("keeps the {digit, progress} shape and the leading-zero rule unchanged", () => {
+    const atoms = 57_471_264_367_816_091_954n;
+    const { int, frac } = digitColumns(atoms, 18);
+    expect(Object.keys(int[0]).sort()).toEqual(["digit", "progress"]);
+    expect(int.map((column) => column.digit).join("")).toBe("57");
+    expect(frac).toHaveLength(18);
+    expect(digitColumns(0n, 18).int).toEqual([{ digit: 0, progress: 0 }]);
+  });
+
+  it("shows why the integer digits are static: one yuan takes about 62 seconds", () => {
+    // 10000 元 / 21.75 天 / 8 小时 → 每秒 0.015964 元
+    const perSecond = 15_964_000_000_000_000n;
+    const onesAt = (seconds: number) =>
+      digitColumns((perSecond * BigInt(Math.round(seconds * 1000))) / 1000n, 18).int.at(-1)!;
+
+    expect(onesAt(1).digit).toBe(0);
+    expect(onesAt(31).digit).toBe(0); // 半分钟还没走到一半
+    expect(onesAt(62).digit).toBe(0);
+    expect(onesAt(63).digit).toBe(1); // 约 62.6 秒才进一格
+
+    // 一格整元的耗时落在 62–63 秒之间：这段时间里个位一位都不变，画面是静止的
+    let crossing = 0;
+    while (onesAt(crossing).digit === 0) crossing += 1;
+    expect(crossing).toBeGreaterThanOrEqual(62);
+    expect(crossing).toBeLessThanOrEqual(63);
+  });
+});

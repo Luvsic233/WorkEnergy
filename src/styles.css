@@ -77,13 +77,18 @@ body {
   letter-spacing: 0.5px;
 }
 
+/* roll 模式的小数不是滚轮，就是一段文本：与整数格子下边沿对齐，不参与任何逐帧位移。 */
+.bar-value[data-mode="roll"] .frac {
+  line-height: 0.8;
+  align-self: flex-end;
+}
+
 .bar-value .dot {
   font-size: 28px;
   opacity: 0.55;
 }
 
-.bar-value .frac,
-.bar-value .frac-group {
+.bar-value .frac {
   font-size: 17px;
   font-weight: 500;
   color: rgba(160, 220, 255, 0.92);
@@ -94,44 +99,41 @@ body {
  * 叠加 6 位整数（46px 字号约 175px）必然溢出。按位数收窄小数区字号，保持整数区的主导地位，
  * 同时保证 18 位时不会有水平溢出或裁切（不淡化、不换行、不裁字）。
  */
-.bar-value[data-decimals="18"] .frac,
-.bar-value[data-decimals="18"] .frac-group {
+.bar-value[data-decimals="18"] .frac {
   font-size: 13px;
 }
 
-.bar-value[data-decimals="12"] .frac,
-.bar-value[data-decimals="12"] .frac-group {
+.bar-value[data-decimals="12"] .frac {
   font-size: 16px;
 }
 
-.bar-value[data-decimals="6"] .frac,
-.bar-value[data-decimals="6"] .frac-group {
+.bar-value[data-decimals="6"] .frac {
   font-size: 17px;
 }
 
 /*
- * 18 位档的小数区有 18 列，整数区还必须容下 7 位（9999999 元）而不溢出 400px 条：
+ * 18 位档的小数区有 18 位，整数区还必须容下 7 位（9999999 元）而不溢出 400px 条：
  * 在 18 位档把整数区收到 40px，两级字号一起给最长的组合留出余量。
  */
 .bar-value[data-decimals="18"] .int-group {
   font-size: 40px;
 }
 
-.bar-value .int-group,
-.bar-value .frac-group {
+.bar-value .int-group {
   display: flex;
   align-items: flex-end;
   line-height: 1;
 }
 
 /*
- * 机械计数器的一位：一条一格高的裁切窗口，内部滚条按 (digit + progress) 格位移。
- * 位移单位取 em，整数区（大字）与小数区（小字）共用同一份位移逻辑，不需要测量像素高度。
+ * 一位整数数字：一条一格高的裁切窗口 + 一条 0–9 滚条，位移恒为 -(digit × PITCH_EM) 的整数格。
+ * 常态精确停在该位的整格上（不出现半格）；只有这一位数值变化时用 260ms 滚过一格再钳到新整格。
+ * 位移单位取 em，不需要测量像素高度，也不依赖 CSS transition。
  */
-.bar-value .wheel {
+.bar-value .digit {
   flex: 0 0 auto;
   display: inline-block;
-  /* 格高 = 一个数字的滚动步长，必须与 RollingDigit 的 PITCH_EM 一致。字形墨迹只占行盒的
+  /* 格高 = 滚动的步长，必须与 RollingDigit 的 PITCH_EM 一致。字形墨迹只占行盒的
      0.7em，格子收到 0.8em 后相邻两格几乎相接，滚到中间时不会留一条空带把两个半字撕开。 */
   height: 0.8em;
   overflow: hidden;
@@ -153,14 +155,14 @@ body {
   );
 }
 
-/* 逐帧被 transform 的元素：单独一层合成，位移不触发 layout / paint。 */
-.bar-value .wheel-track {
+/* 被 transform 的元素：单独一层合成，位移不触发 layout / paint。 */
+.bar-value .digit-track {
   display: block;
   will-change: transform;
   transform: translate3d(0, 0, 0);
 }
 
-.bar-value .wheel-glyph {
+.bar-value .digit-glyph {
   display: block;
   /* 行盒与格高相同：墨迹在格内居中，上下各留约 0.05em 的余量，正好不切字。 */
   height: 0.8em;

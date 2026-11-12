@@ -4,7 +4,7 @@ import { DEFAULT_DECIMALS, type Decimals } from "./format";
 /** 小数位数可选档位（18 = 机芯原生上限），面板按此顺序渲染，白名单与之一致。 */
 export const DECIMALS_OPTIONS: readonly Decimals[] = [18, 12, 6];
 
-/** DOM 重绘频率档位：60 = 每帧、10 = 每 100ms、1 = 每 1000ms。 */
+/** 文本跳变频率档位：60 = 每帧、10 = 每 100ms、1 = 每 1000ms。 */
 export type RefreshHz = 60 | 10 | 1;
 
 /** 跳动频率可选档位，面板按此顺序渲染。 */
@@ -12,8 +12,9 @@ export const REFRESH_HZ_OPTIONS: readonly RefreshHz[] = [60, 10, 1];
 
 /**
  * 金额区的显示方式：
- * - roll：机械计数器，每帧（60fps）推进滚条位移，看着数字慢慢累加；此档 refreshHz 不生效。
- * - jump：整串数字按 refreshHz 整跳（旧行为）。
+ * - roll：整数位常态精确停在该位的整格上，只有这一位数值变化时才用 260ms 快速滚过一格
+ *   （绝不长时间停在两格之间）；小数不是滚轮，按 refreshHz 整片跳变。
+ * - jump：没有任何动画，整数与小数一起按 refreshHz 整片跳变（旧行为）。
  */
 export type DisplayMode = "roll" | "jump";
 
@@ -33,9 +34,9 @@ export interface RawInput {
   overtimeMode: boolean;
   /** 小数位数：18 位（默认，机芯上限）/ 12 位 / 6 位。 */
   decimals: Decimals;
-  /** DOM 重绘频率档位，默认 1Hz；只在 displayMode 为 jump 时生效。 */
+  /** 文本跳变频率档位，默认 1Hz；roll 模式只管小数文本，jump 模式管整串数字。 */
   refreshHz: RefreshHz;
-  /** 金额区显示方式，默认 roll（逐帧滚条）。 */
+  /** 金额区显示方式，默认 roll（整数精确落位 + 变化时快速滚一格，小数按 refreshHz 跳）。 */
   displayMode: DisplayMode;
 }
 

@@ -33,7 +33,11 @@ export function formatAtoms(atoms: bigint, decimals: Decimals = DEFAULT_DECIMALS
   };
 }
 
-/** 一位数字的滚动状态：digit 是这一位当前的数字，progress 是它向下一数字滚进的进度（只用于动画，永不进金额）。 */
+/**
+ * 一位数字的状态：digit 是这一位当前的数字，progress 是它向下一数字滚进的进度。
+ * 现在的渲染器只用 digit（整数位每帧精确落在 -digit × 一格的整格上，绝不长时间停在半格），
+ * progress 仍按契约输出：它随时可用，也仍然是"金额只由 BigInt 推导"这一契约的组成部分。
+ */
 export interface DigitColumn {
   digit: number;
   progress: number;
