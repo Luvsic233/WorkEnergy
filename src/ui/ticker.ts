@@ -22,18 +22,21 @@ export interface TickerFrame {
   columns: DigitColumns;
   /** 这一帧的挂钟时刻（ms）：整数位的进位动画以它为时钟，组件不自己读 Date.now。 */
   nowMs: number;
-  /** 文本改期门限：为 true 时这一帧才允许写小数文本（roll 模式）或整串文本（jump 模式）。 */
+  /**
+   * 小数改期门限：为 true 时这一帧才允许检测小数位的数字变化并启动滚动（roll 模式），
+   * 或整片替换整串文本（jump 模式）。滚动动画本身仍然每帧推进。
+   */
   textDue: boolean;
 }
 
 export interface TickerOptions {
-  /** 文本改期的档位（小数跳变频率）；省略时每帧都到期（既有调用方的契约）。 */
+  /** 小数改期的档位（变化检测频率）；省略时每帧都到期（既有调用方的契约）。 */
   refreshHz?: RefreshHz;
   /** 小数位数档位，默认 18 位。 */
   decimals?: Decimals;
   /**
    * 显示方式，默认 roll：
-   * - roll：整数位每帧都会被推到整格（数值变化时自己滚一格）；小数不是滚轮，只按 refreshHz 整片跳变。
+   * - roll：整数与小数每帧都被推到整格，但小数只按 refreshHz 检测一次数值变化、变化时向上滚 d 格。
    * - jump：没有动画，整数与小数一起按 refreshHz 整片跳变，此时 onFrame 只在到期的帧上被调用。
    */
   displayMode?: DisplayMode;
@@ -98,7 +101,7 @@ export function startTicker(
         onFrame(computeFrame(settings, nowMs, decimals, true));
       }
     } else {
-      // 小数文本走同一套 shouldRender 门限：1Hz 档位下 18 位小数每秒只重写一次。
+      // 小数的变化检测走同一套 shouldRender 门限：1Hz 档位下 18 位小数每秒只启动一次滚动。
       const textDue = shouldRender(nowMs, lastTextMs, refreshHz);
       if (textDue) lastTextMs = nowMs;
       onFrame(computeFrame(settings, nowMs, decimals, textDue));

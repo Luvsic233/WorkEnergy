@@ -77,10 +77,25 @@ body {
   letter-spacing: 0.5px;
 }
 
-/* roll 模式的小数不是滚轮，就是一段文本：与整数格子下边沿对齐，不参与任何逐帧位移。 */
+/* jump 模式的小数就是一段文本：与整数下边沿对齐，不参与任何逐帧位移。 */
 .bar-value[data-mode="roll"] .frac {
   line-height: 0.8;
   align-self: flex-end;
+}
+
+/*
+ * roll 模式的小数也是格子：每位一个 .digit（一格窗口 + 一条 19 格滚条）。
+ * 整组与整数格子下边沿对齐；tabular-nums 让每格等宽，滚动时整排不会左右抖。
+ */
+.bar-value .frac-group {
+  display: flex;
+  align-items: flex-end;
+  align-self: flex-end;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: rgba(160, 220, 255, 0.92);
+  font-variant-numeric: tabular-nums;
 }
 
 .bar-value .dot {
@@ -99,15 +114,18 @@ body {
  * 叠加 6 位整数（46px 字号约 175px）必然溢出。按位数收窄小数区字号，保持整数区的主导地位，
  * 同时保证 18 位时不会有水平溢出或裁切（不淡化、不换行、不裁字）。
  */
-.bar-value[data-decimals="18"] .frac {
+.bar-value[data-decimals="18"] .frac,
+.bar-value[data-decimals="18"] .frac-group {
   font-size: 13px;
 }
 
-.bar-value[data-decimals="12"] .frac {
+.bar-value[data-decimals="12"] .frac,
+.bar-value[data-decimals="12"] .frac-group {
   font-size: 16px;
 }
 
-.bar-value[data-decimals="6"] .frac {
+.bar-value[data-decimals="6"] .frac,
+.bar-value[data-decimals="6"] .frac-group {
   font-size: 17px;
 }
 

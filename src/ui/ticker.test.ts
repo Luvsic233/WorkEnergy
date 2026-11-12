@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseSettings } from "../core/earning";
+import { fracFrame, fracIndexAt, fracProgress, type FracMotion } from "./RollingDigit";
 import { intervalMsOf, nextDeadline, shouldRender, startTicker, type TickerFrame, type TickerHost } from "./ticker";
 
 const settings = parseSettings({ salary: "10000" });
@@ -312,5 +313,69 @@ describe("textDue：小数文本的跳变门限", () => {
     expect(roll.frames.filter((frame) => frame.textDue).map((frame) => frame.money)).toEqual(
       jump.frames.map((frame) => frame.money),
     );
+  });
+});
+
+describe("小数位滚动：refreshHz 门限", () => {
+  it("starts at most one roll per due frame — three in three seconds, not sixty", () => {
+    const bench = harness(at(10, 0), 16);
+    startTicker(bench.host, settings, record(bench), { refreshHz: 1, decimals: 18, displayMode: "roll" });
+
+    bench.run(188); // 3008ms，1Hz 档位
+
+    // 用与组件完全相同的状态机回放：任何时刻的滚动段都只能起始于一个 textDue 帧
+    const motions: (FracMotion | null)[] = Array.from({ length: 18 }, () => null);
+    const epochs = new Set<number>();
+    const startsPerDigit = Array.from({ length: 18 }, () => 0);
+    const dueStamps = new Set<number>();
+    for (const frame of bench.frames) {
+      if (frame.textDue) dueStamps.add(frame.nowMs);
+      for (let index = 0; index < 18; index += 1) {
+        const prev = motions[index];
+        const next = fracFrame(prev, frame.columns.frac[index].digit, frame.nowMs, frame.textDue);
+        if (next.from !== next.to && (prev === null || prev.from === prev.to)) {
+          epochs.add(next.startMs);
+          startsPerDigit[index] += 1;
+        }
+        motions[index] = next;
+      }
+    }
+
+    expect(dueStamps.size).toBe(3); // 3008ms 里只有 3 个到期帧
+    // 3 秒内整排小数最多启动 3 段滚动（首帧是"直接落位"，不算滚动），绝不是每帧一段
+    expect(epochs.size).toBeLessThanOrEqual(dueStamps.size);
+    expect(epochs.size).toBeGreaterThanOrEqual(1);
+    expect([...epochs].every((stamp) => dueStamps.has(stamp))).toBe(true);
+    for (const starts of startsPerDigit) expect(starts).toBeLessThanOrEqual(3);
+    expect(startsPerDigit.reduce((sum, value) => sum + value, 0)).toBeGreaterThan(0); // 确实滚了
+  });
+
+  it("leaves no residual: every frame is either an exact grid or strictly inside one roll", () => {
+    const bench = harness(at(10, 0), 16);
+    startTicker(bench.host, settings, record(bench), { refreshHz: 1, decimals: 18, displayMode: "roll" });
+
+    bench.run(188);
+
+    const motions: (FracMotion | null)[] = Array.from({ length: 18 }, () => null);
+    let rolling = 0;
+    for (const frame of bench.frames) {
+      for (let index = 0; index < 18; index += 1) {
+        const motion = fracFrame(motions[index], frame.columns.frac[index].digit, frame.nowMs, frame.textDue);
+        motions[index] = motion;
+        const position = fracIndexAt(motion, frame.nowMs);
+        const progress = fracProgress(motion, frame.nowMs);
+        if (progress === 0 || progress === 1) {
+          // 静止 / 起点 / 落点：位移格号必须精确是整数，没有半格残差
+          expect(Number.isInteger(position)).toBe(true);
+        } else {
+          rolling += 1;
+          expect(position).toBeGreaterThan(motion.from);
+          expect(position).toBeLessThan(motion.to);
+        }
+      }
+    }
+    // 3 秒里滚动只占 215–335ms 的少数片段，绝大多数帧都停在整格上
+    expect(rolling).toBeGreaterThan(0);
+    expect(rolling / (bench.frames.length * 18)).toBeLessThan(0.5);
   });
 });

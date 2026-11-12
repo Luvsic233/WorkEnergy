@@ -1,9 +1,15 @@
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import type { Settings } from "../core/earning";
-import { DEFAULT_DECIMALS, formatMicro, type Decimals, type DigitColumns } from "../core/format";
+import {
+  DEFAULT_DECIMALS,
+  formatMicro,
+  type Decimals,
+  type DigitColumn,
+  type DigitColumns,
+} from "../core/format";
 import { DEFAULT_INPUT, type DisplayMode, type RefreshHz } from "../core/settings";
 import { invoke } from "../settings/bridge";
-import { DigitCell, type DigitCellHandle } from "./RollingDigit";
+import { DigitCell, FracCell, type DigitCellHandle, type FracCellHandle } from "./RollingDigit";
 import { startTicker } from "./ticker";
 
 /**
@@ -15,6 +21,11 @@ const INT_SLOTS = 12;
 export interface RollingIntHandle {
   /** 逐帧把每一位推到它该停的整格；只碰 style，不进 React 状态。 */
   paint(columns: DigitColumns, nowMs: number): void;
+}
+
+export interface RollingFracHandle {
+  /** 逐帧把每一位小数推到它该停的整格；只有 due 帧才检测变化并启动滚动。 */
+  paint(columns: DigitColumn[], nowMs: number, due: boolean): void;
 }
 
 interface RollingIntProps {
@@ -55,10 +66,48 @@ function RollingInt({ ref }: RollingIntProps) {
   );
 }
 
+interface RollingFracProps {
+  /** 小数位数档位：格子数跟着档位走（18 / 12 / 6）。 */
+  decimals: Decimals;
+  ref?: Ref<RollingFracHandle>;
+}
+
+/** 小数区：每位一个滚条格子，向后代换的是"向上滚 d 格"而不是整片跳文本。 */
+function RollingFrac({ decimals, ref }: RollingFracProps) {
+  const handles = useRef<(FracCellHandle | null)[]>([]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      paint(columns, nowMs, due) {
+        for (let index = 0; index < handles.current.length; index += 1) {
+          const column = columns[index];
+          handles.current[index]?.paint(column?.digit ?? 0, nowMs, column !== undefined, due);
+        }
+      },
+    }),
+    [],
+  );
+
+  return (
+    <span className="frac-group">
+      {Array.from({ length: decimals }, (_, index) => (
+        <FracCell
+          key={index}
+          fpos={index + 1}
+          ref={(handle) => {
+            handles.current[index] = handle;
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
 interface FloatingBarProps {
   settings: Settings;
   decimals?: Decimals;
-  /** 小数文本的整片跳变频率；roll / jump 两种模式都按它节流小数（jump 连整数一起跳）。 */
+  /** 小数位的改期频率：roll / jump 两种模式都按它决定"哪一帧才允许检测数字变化"。 */
   refreshHz?: RefreshHz;
   displayMode?: DisplayMode;
   now?: () => number;
@@ -72,6 +121,7 @@ export function FloatingBar({
   now,
 }: FloatingBarProps) {
   const rollerRef = useRef<RollingIntHandle>(null);
+  const fracRollerRef = useRef<RollingFracHandle>(null);
   const intRef = useRef<HTMLSpanElement>(null);
   const fracRef = useRef<HTMLSpanElement>(null);
   const phaseRef = useRef<HTMLSpanElement>(null);
@@ -91,8 +141,8 @@ export function FloatingBar({
         if (displayMode === "roll") {
           // 整数：每位推到整格，数值变化时由进位状态机自己滚一格。
           rollerRef.current?.paint(columns, nowMs);
-          // 小数不是滚轮：只在 shouldRender(refreshHz) 到期的帧上整片换文本。
-          if (textDue && fracRef.current) fracRef.current.textContent = money.frac;
+          // 小数：同样是格子，但只在 textDue（refreshHz 到期）的帧上检测变化并启动一次向上滚动。
+          fracRollerRef.current?.paint(columns.frac, nowMs, textDue);
         } else {
           // jump：整数与小数一起按 refreshHz 整片跳，没有任何动画。
           if (intRef.current) intRef.current.textContent = money.int;
@@ -135,9 +185,13 @@ export function FloatingBar({
       <div className="bar-value" data-decimals={decimals} data-mode={displayMode}>
         {displayMode === "roll" ? <RollingInt ref={rollerRef} /> : <span className="int" ref={intRef}>0</span>}
         <span className="dot">.</span>
-        <span className="frac" ref={fracRef}>
-          {"0".repeat(decimals)}
-        </span>
+        {displayMode === "roll" ? (
+          <RollingFrac decimals={decimals} ref={fracRollerRef} />
+        ) : (
+          <span className="frac" ref={fracRef}>
+            {"0".repeat(decimals)}
+          </span>
+        )}
         <span className="unit">元</span>
       </div>
       <div className="bar-foot">
