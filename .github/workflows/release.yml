@@ -6,10 +6,10 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    branches: [master, dev, release]
     tags: ["v*"]
   pull_request:
-    branches: [main]
+    branches: [master, dev]
   workflow_dispatch:
 
 # 最小权限；只有下方 release job 单独提升到 contents: write
@@ -106,7 +106,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
           generate_release_notes: true
           files: |
             artifacts/**/*.exe
