@@ -69,9 +69,6 @@ jobs:
           # 只缓存 src-tauri 这个 crate 的 target 目录（Cargo.lock 在 src-tauri/ 下）
           workspaces: "src-tauri -> target"
 
-      - name: Install Tauri CLI
-        run: pnpm add -D @tauri-apps/cli@^2
-
       - name: Build Tauri app
         # tauri.conf.json 没配 beforeBuildCommand，所以前端 dist/ 必须由上面的步骤产出。
         # 这里按 host 目标原生产物，产物落在 src-tauri/target/release/**；
