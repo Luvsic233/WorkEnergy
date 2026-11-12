@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import type { Settings } from "../core/earning";
 import {
   DEFAULT_DECIMALS,
@@ -9,6 +9,8 @@ import {
 } from "../core/format";
 import { DEFAULT_INPUT, type DisplayMode, type RefreshHz } from "../core/settings";
 import { invoke } from "../settings/bridge";
+import { CELEBRATION_STEP, crossedMultiple } from "../theme/celebration";
+import { integerYuanOf } from "../theme/mascot";
 import { MascotImage } from "../theme/MascotImage";
 import { PhotoArt } from "../theme/PhotoArt";
 import { layoutOf } from "../theme/layout";
@@ -145,6 +147,18 @@ export function FloatingBar({
   // 吉祥物状态机：notify 只写 ref，状态真的变化时才 setState 一次（无吉祥物的主题整条链路空转）。
   const mascot = useMascot(theme);
   const mascotNotify = mascot.notify;
+  // 庆祝弹窗的 20 元台阶：与吉祥物同一套纪律 —— 只在整数文本变化时比一次 BigInt，
+  // 跨过台阶才 invoke 一次，其余帧零 IPC、零字符串拼接。
+  const celebrateIntRef = useRef("");
+  const celebrateYuanRef = useRef<bigint | null>(null);
+  const notifyCelebration = useCallback((moneyInt: string) => {
+    if (moneyInt === celebrateIntRef.current) return;
+    celebrateIntRef.current = moneyInt;
+    const yuan = integerYuanOf(moneyInt);
+    const crossed = yuan !== null && crossedMultiple(celebrateYuanRef.current, yuan, CELEBRATION_STEP);
+    celebrateYuanRef.current = yuan;
+    if (crossed) void invoke("show_celebration");
+  }, []);
   // photo-left 版式的窗口宽度跟着内容走（其余版式整条链路空转）。
   const isPhotoLeft = layoutOf(theme) === "photo-left";
   const adaptive = useAdaptiveCardWidth(isPhotoLeft, { bar: barRef, main: mainRef });
@@ -178,12 +192,14 @@ export function FloatingBar({
         }
         // 吉祥物：只把整数元文本与阶段交给状态机，滚轮与引擎一行没动。
         mascotNotify(money.int, phase);
+        // 庆祝弹窗：同一份整数文本，跨过 20 元台阶时弹一次。
+        notifyCelebration(money.int);
         // 自适应宽度：只在整数位数变化（并稳定若干帧）时才下发一次窗口尺寸。
         adaptiveNote(money.int);
       },
       { refreshHz, decimals, displayMode },
     );
-  }, [settings, decimals, refreshHz, displayMode, now, mascotNotify, adaptiveNote]);
+  }, [settings, decimals, refreshHz, displayMode, now, mascotNotify, adaptiveNote, notifyCelebration]);
 
   // 两个版式共用的两块：数字区与阶段文字（滚轮 / ticker / 每帧 paint 一行都没动）。
   const valueBlock = (

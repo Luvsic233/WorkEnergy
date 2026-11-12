@@ -6,6 +6,7 @@ import { localStorageAdapter, readStoredSizePreset } from "./settings/storage";
 import { DEFAULT_THEME_ID, FALLBACK_THEME, builtinTheme } from "./theme/builtin";
 import { applyStoredTheme } from "./theme/css";
 import { readStoredThemeId } from "./theme/storage";
+import { CelebrationOverlay } from "./theme/CelebrationOverlay";
 import { useThemes } from "./theme/useThemes";
 import { applyStartupThemeWindowSize, applyThemeWindowSize } from "./theme/windowSize";
 import { FloatingBar } from "./ui/FloatingBar";
@@ -16,8 +17,15 @@ const BASE_SETTINGS = parseSettings({ salary: "10000" });
 /** 独立设置窗口的路由（同一份 bundle，按 hash 分流）。 */
 const SETTINGS_ROUTE = "#/settings";
 
+/** 庆祝弹窗的路由（同一个 bundle；窗口尺寸由 Rust 侧定为 200x200，前端不参与缩放）。 */
+const CELEBRATE_ROUTE = "#/celebrate";
+
 function inSettingsWindow(): boolean {
   return window.location.hash.startsWith(SETTINGS_ROUTE);
+}
+
+function inCelebrateWindow(): boolean {
+  return window.location.hash.startsWith(CELEBRATE_ROUTE);
 }
 
 /*
@@ -29,7 +37,7 @@ function inSettingsWindow(): boolean {
  * 固定尺寸主题（内置 maodie = 340x96）走同一条时序，只是尺寸来自主题而不是档位；
  * 此时用户主题还没扫，只认内置主题，扫完由下面的 effect 补上真正的选择。
  */
-if (!inSettingsWindow()) {
+if (!inSettingsWindow() && !inCelebrateWindow()) {
   const startupTheme = builtinTheme(readStoredThemeId() ?? DEFAULT_THEME_ID) ?? FALLBACK_THEME;
   applyStartupThemeWindowSize(startupTheme, readStoredSizePreset());
 }
@@ -142,5 +150,8 @@ function SettingsWindow() {
 }
 
 export function App() {
-  return inSettingsWindow() ? <SettingsWindow /> : <FloatingWindow />;
+  if (inSettingsWindow()) return <SettingsWindow />;
+  // 庆祝弹窗是独立窗口（label=celebrate，200x200）：只画图，不挂悬浮条、不读设置。
+  if (inCelebrateWindow()) return <CelebrationOverlay />;
+  return <FloatingWindow />;
 }
