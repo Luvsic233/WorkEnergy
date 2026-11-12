@@ -12,6 +12,7 @@ import { invoke } from "../settings/bridge";
 import { MascotImage } from "../theme/MascotImage";
 import { PhotoArt } from "../theme/PhotoArt";
 import { layoutOf } from "../theme/layout";
+import { useAdaptiveCardWidth } from "../theme/adaptiveWidth";
 import type { Theme } from "../theme/types";
 import { useMascot } from "../theme/useMascot";
 import { DigitCell, FracCell, type DigitCellHandle, type FracCellHandle } from "./RollingDigit";
@@ -136,12 +137,18 @@ export function FloatingBar({
 }: FloatingBarProps) {
   const rollerRef = useRef<RollingIntHandle>(null);
   const fracRollerRef = useRef<RollingFracHandle>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
   const intRef = useRef<HTMLSpanElement>(null);
   const fracRef = useRef<HTMLSpanElement>(null);
   const phaseRef = useRef<HTMLSpanElement>(null);
   // 吉祥物状态机：notify 只写 ref，状态真的变化时才 setState 一次（无吉祥物的主题整条链路空转）。
   const mascot = useMascot(theme);
   const mascotNotify = mascot.notify;
+  // photo-left 版式的窗口宽度跟着内容走（其余版式整条链路空转）。
+  const isPhotoLeft = layoutOf(theme) === "photo-left";
+  const adaptive = useAdaptiveCardWidth(isPhotoLeft, { bar: barRef, main: mainRef });
+  const adaptiveNote = adaptive.note;
 
   useEffect(() => {
     const host = {
@@ -171,10 +178,12 @@ export function FloatingBar({
         }
         // 吉祥物：只把整数元文本与阶段交给状态机，滚轮与引擎一行没动。
         mascotNotify(money.int, phase);
+        // 自适应宽度：只在整数位数变化（并稳定若干帧）时才下发一次窗口尺寸。
+        adaptiveNote(money.int);
       },
       { refreshHz, decimals, displayMode },
     );
-  }, [settings, decimals, refreshHz, displayMode, now, mascotNotify]);
+  }, [settings, decimals, refreshHz, displayMode, now, mascotNotify, adaptiveNote]);
 
   // 两个版式共用的两块：数字区与阶段文字（滚轮 / ticker / 每帧 paint 一行都没动）。
   const valueBlock = (
@@ -222,6 +231,7 @@ export function FloatingBar({
   if (layoutOf(theme) === "photo-left") {
     return (
       <div
+        ref={barRef}
         className="bar"
         data-layout="photo-left"
         // deep：整条（含标签与阶段文字）都能按住拖动；button/input 这类可点击元素
@@ -231,7 +241,7 @@ export function FloatingBar({
       >
         {closeButton}
         <PhotoArt state={mascot.state} />
-        <div className="bar-photo-main">
+        <div className="bar-photo-main" ref={mainRef}>
           <div className="bar-label">今日实时工资</div>
           {valueBlock}
           <div className="bar-foot">{phaseBlock}</div>

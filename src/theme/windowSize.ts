@@ -50,6 +50,13 @@ export function applyThemeWindowSize(theme: Theme | null, preset: SizePreset): v
   void setWindowSize(fixed.width, fixed.height);
 }
 
+/** 固定尺寸主题：只改窗口尺寸与内容缩放（运行期自适应宽度也走这里）。 */
+export function applyFixedWindowSize(width: number, height: number): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.style.setProperty("--bar-scale", String(FIXED_THEME_SCALE));
+  void setWindowSize(width, height);
+}
+
 /** 启动时（React 挂载之前）：与 applyThemeWindowSize 同样的分工，带着"先藏后显"。 */
 export function applyStartupThemeWindowSize(theme: Theme | null, preset: SizePreset): void {
   const fixed = windowSizeOf(theme);
