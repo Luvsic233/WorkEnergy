@@ -80,3 +80,16 @@ export function pickPhotoFile(files: readonly string[], state: MascotState): str
   const sorted = [...new Set(byLowerName.values())].sort(byFileName);
   return sorted.length > 0 ? sorted[0] : null;
 }
+
+/**
+ * 内置图的选择：有本状态的图就用本状态，否则退到 idle，都没有就是 null。
+ * available 是"构建时真的打进包里"的状态集合（由 import.meta.glob 得出）。
+ */
+export function pickBundledState(
+  state: MascotState,
+  available: readonly MascotState[],
+): MascotState | null {
+  if (available.includes(state)) return state;
+  if (available.includes("idle")) return "idle";
+  return null;
+}

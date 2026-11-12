@@ -41,7 +41,9 @@ describe("FloatingBar：photo-left 版式（内置耄耋猫）", () => {
     const html = render(maodie, 18);
 
     expect(html).toContain('data-layout="photo-left"');
-    expect(html).toContain('class="bar-photo-art" data-photo="fallback"');
+    // 包里内置了 kitty-idle，所以 SSR 就能渲染出 <img>（浏览器里没有磁盘也照样有图）
+    expect(html).toContain('class="bar-photo-art" data-photo="image"');
+    expect(html).toContain("bar-photo-img");
     expect(html).toContain('class="bar-photo-main"');
     // 右侧三块：标签 / 数字区 / 阶段
     expect(html).toContain("今日实时工资");
@@ -71,11 +73,12 @@ describe("FloatingBar：photo-left 版式（内置耄耋猫）", () => {
     expect((render(maodie, 12).match(/frac-digit/g) ?? []).length).toBe(12);
   });
 
-  it("renders the solid colour block instead of an <img> when no photo can be resolved", () => {
-    // node 里没有磁盘 / asset 协议：必须退化成纯色块，绝不能抛错或渲染破图
+  it("falls back to the bundled idle image even without any disk access", () => {
+    // node 里没有磁盘 / asset 协议：此时必须用打进包里的内置图，而不是纯色块。
     const html = render(maodie, 18);
-    expect(html).toContain('data-photo="fallback"');
-    expect(html).not.toContain("bar-photo-img");
+    expect(html).toContain('data-photo="image"');
+    expect(html).toMatch(/class="bar-photo-img"[^>]*src="[^"]*kitty-idle/);
+    expect(html).toContain('draggable="false"');
   });
 
   it("keeps the drag region and the hide-to-tray button", () => {

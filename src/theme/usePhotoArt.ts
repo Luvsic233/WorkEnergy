@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { appDataDirOf, listDirFiles, toAssetUrl } from "./io";
 import { themeAssetPath } from "./paths";
 import { photoDirOf, pickPhotoFile } from "./photoLeft";
+import { bundledPhotoUrl } from "./bundledPhotos";
 import type { MascotState } from "./types";
 
 export function usePhotoArt(state: MascotState): string | null {
@@ -33,8 +34,9 @@ export function usePhotoArt(state: MascotState): string | null {
 
   const file = useMemo(() => (files === null ? null : pickPhotoFile(files, state)), [files, state]);
 
+  // 三级优先：用户目录里的图（可覆盖）> 打进包里的内置图 > null（纯色块）。
   return useMemo(() => {
-    if (dir === null || file === null) return null;
-    return toAssetUrl(themeAssetPath(dir, file));
-  }, [dir, file]);
+    if (dir !== null && file !== null) return toAssetUrl(themeAssetPath(dir, file));
+    return bundledPhotoUrl(state);
+  }, [dir, file, state]);
 }

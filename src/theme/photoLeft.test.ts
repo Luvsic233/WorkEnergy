@@ -5,6 +5,7 @@ import {
   photoCandidateFiles,
   photoDirOf,
   pickPhotoFile,
+  pickBundledState,
 } from "./photoLeft";
 
 describe("photo-left：状态 → 候选文件名", () => {
@@ -84,5 +85,19 @@ describe("photo-left：挑图（含兜底）", () => {
     expect(isPhotoFile("kitty-idle.WEBP")).toBe(true);
     expect(isPhotoFile("README.md")).toBe(false);
     expect(isPhotoFile("kitty-idle")).toBe(false);
+  });
+});
+
+describe("pickBundledState", () => {
+  it("prefers the requested state when the bundle has it", () => {
+    expect(pickBundledState("overtime", ["idle", "overtime"])).toBe("overtime");
+  });
+
+  it("falls back to idle when the requested state is missing", () => {
+    expect(pickBundledState("milestone", ["idle"])).toBe("idle");
+  });
+
+  it("returns null when nothing is bundled", () => {
+    expect(pickBundledState("idle", [])).toBeNull();
   });
 });
