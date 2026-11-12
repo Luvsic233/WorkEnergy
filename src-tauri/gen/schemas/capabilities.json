@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"悬浮条与设置窗口的最小权限集：核心默认集 + 拖动窗口（data-tauri-drag-region 走 plugin:window|start_dragging）","local":true,"windows":["main","settings"],"permissions":["core:default","core:window:allow-start-dragging"]}}
+{"default":{"identifier":"default","description":"悬浮条与设置窗口的最小权限集：核心默认集 + 拖动窗口（data-tauri-drag-region 走 plugin:window|start_dragging）+ 改悬浮条窗口尺寸（窗口尺寸档位走 plugin:window|set_size）","local":true,"windows":["main","settings"],"permissions":["core:default","core:window:allow-start-dragging","core:window:allow-set-size"]}}
