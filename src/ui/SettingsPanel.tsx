@@ -12,6 +12,8 @@ import {
   type RawInput,
 } from "../core/settings";
 import type { StorageAdapter } from "../settings/storage";
+import { BUILTIN_THEMES, DEFAULT_THEME_ID } from "../theme/builtin";
+import type { Theme } from "../theme/types";
 import "../settings/panel.css";
 
 interface SettingsPanelProps {
@@ -20,7 +22,17 @@ interface SettingsPanelProps {
   adapter: StorageAdapter;
   onClose(): void;
   onSaved(value: RawInput): void;
+  /**
+   * 可选的主题服务：不传时只列内置主题（面板要能在没有主题服务的场合单独渲染，例如 SSR 单测）。
+   * 传了就是完整清单（内置 + 用户目录），切换回调把选择交给调用方去持久化并立即生效。
+   */
+  themes?: readonly Theme[];
+  themeId?: string;
+  onSelectTheme?(id: string): void;
+  onOpenThemeFolder?(): void;
 }
+
+const NOOP = () => undefined;
 
 interface FieldProps {
   label: string;
@@ -101,7 +113,17 @@ function Choice<T extends number | string>({
   );
 }
 
-export function SettingsPanel({ open, initial, adapter, onClose, onSaved }: SettingsPanelProps) {
+export function SettingsPanel({
+  open,
+  initial,
+  adapter,
+  onClose,
+  onSaved,
+  themes = BUILTIN_THEMES,
+  themeId = DEFAULT_THEME_ID,
+  onSelectTheme = NOOP,
+  onOpenThemeFolder = NOOP,
+}: SettingsPanelProps) {
   const [draft, setDraft] = useState<RawInput>(initial);
   const [advanced, setAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -200,6 +222,38 @@ export function SettingsPanel({ open, initial, adapter, onClose, onSaved }: Sett
           format={(option) => sizePresetSpec(option).label}
           onChange={(value) => update("sizePreset", value)}
         />
+      </div>
+
+      <div className="settings-themes">
+        <div className="settings-choice">
+          <span className="settings-field-label">外观主题</span>
+          <div className="settings-theme-list" role="radiogroup" aria-label="外观主题">
+            {themes.map((theme) => {
+              const active = theme.id === themeId;
+              return (
+                <button
+                  key={theme.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  className={active ? "settings-theme is-active" : "settings-theme"}
+                  onClick={() => onSelectTheme(theme.id)}
+                >
+                  <span
+                    className="settings-theme-swatch"
+                    style={{ background: theme.colors.bar, borderColor: theme.colors.border }}
+                  />
+                  <span className="settings-theme-name">{theme.name}</span>
+                  <span className="settings-theme-source">{theme.source === "builtin" ? "内置" : "用户目录"}</span>
+                </button>
+              );
+            })}
+          </div>
+          <span className="settings-hint">切换立即生效，无需重启；配色与字体在浏览器预览里同样能看到效果。</span>
+          <button type="button" className="settings-btn settings-theme-open" onClick={onOpenThemeFolder}>
+            打开主题文件夹
+          </button>
+        </div>
       </div>
 
       <button

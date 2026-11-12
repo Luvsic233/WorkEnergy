@@ -283,3 +283,74 @@
   font-size: 11px;
   line-height: 1.35;
 }
+
+/*
+ * 外观主题列表：一行一个主题，左侧色板直接用该主题的 bar 背景色 + 边框色，
+ * 用户不必点进去就能看出大概长什么样。选中态复用档位按钮的蓝色语汇。
+ */
+.settings-themes {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(8, 10, 14, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.settings-theme-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-theme {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 10, 14, 0.5);
+  color: rgba(226, 232, 240, 0.72);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-theme:hover {
+  border-color: rgba(160, 220, 255, 0.4);
+  color: #f2f4f8;
+}
+
+.settings-theme.is-active {
+  border-color: rgba(82, 122, 255, 0.55);
+  background: rgba(82, 122, 255, 0.22);
+  color: #eef2ff;
+}
+
+.settings-theme-swatch {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid;
+}
+
+.settings-theme-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-theme-source {
+  flex: 0 0 auto;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.settings-theme-open {
+  align-self: flex-start;
+}

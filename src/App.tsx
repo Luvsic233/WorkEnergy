@@ -3,6 +3,8 @@ import { parseSettings } from "./core/earning";
 import { DEFAULT_INPUT, validateInput, type RawInput } from "./core/settings";
 import { applySizePreset, applyStartupSizePreset, emit, invoke, listen } from "./settings/bridge";
 import { localStorageAdapter, readStoredSizePreset } from "./settings/storage";
+import { applyStoredTheme } from "./theme/css";
+import { useThemes } from "./theme/useThemes";
 import { FloatingBar } from "./ui/FloatingBar";
 import { SettingsPanel } from "./ui/SettingsPanel";
 
@@ -22,6 +24,12 @@ function inSettingsWindow(): boolean {
  * 400x120 画一遍再突然收缩。设置窗口（430x540 带系统标题栏）不参与缩窗。
  */
 if (!inSettingsWindow()) applyStartupSizePreset(readStoredSizePreset());
+
+/*
+ * 主题同理：React 挂载之前先把"已保存的主题"落到 CSS 变量上（此时用户主题还没扫，
+ * 只认内置主题；扫完由 useThemes 补上真正的选择）。两个窗口都做，设置窗口的预览也跟着变。
+ */
+applyStoredTheme();
 
 /** 读已保存的输入，并在设置窗口保存后（跨窗口事件）重新读一次。 */
 function useSavedInput(): RawInput {
@@ -54,6 +62,7 @@ function useSavedInput(): RawInput {
 /** 悬浮条窗口：400x120 里只有数字与阶段文字。 */
 function FloatingWindow() {
   const savedInput = useSavedInput();
+  const themes = useThemes();
   const settings = useMemo(
     () => ({ ...(validateInput(savedInput).settings ?? BASE_SETTINGS), overtimeMode: savedInput.overtimeMode }),
     [savedInput],
@@ -72,6 +81,7 @@ function FloatingWindow() {
         decimals={savedInput.decimals}
         refreshHz={savedInput.refreshHz}
         displayMode={savedInput.displayMode}
+        theme={themes.current}
       />
     </main>
   );
@@ -80,6 +90,7 @@ function FloatingWindow() {
 /** 独立设置窗口：带系统标题栏，关闭时隐藏（再次「设置…」直接复用）。 */
 function SettingsWindow() {
   const [initial, setInitial] = useState<RawInput | null>(null);
+  const themes = useThemes();
 
   useEffect(() => {
     let alive = true;
@@ -103,6 +114,10 @@ function SettingsWindow() {
           open
           initial={initial}
           adapter={localStorageAdapter}
+          themes={themes.themes}
+          themeId={themes.currentId}
+          onSelectTheme={themes.selectTheme}
+          onOpenThemeFolder={themes.openThemeFolder}
           onClose={() => {
             void invoke("hide_settings");
           }}

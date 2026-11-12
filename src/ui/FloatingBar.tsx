@@ -9,6 +9,9 @@ import {
 } from "../core/format";
 import { DEFAULT_INPUT, type DisplayMode, type RefreshHz } from "../core/settings";
 import { invoke } from "../settings/bridge";
+import { MascotImage } from "../theme/MascotImage";
+import type { Theme } from "../theme/types";
+import { useMascot } from "../theme/useMascot";
 import { DigitCell, FracCell, type DigitCellHandle, type FracCellHandle } from "./RollingDigit";
 import { startTicker } from "./ticker";
 
@@ -113,6 +116,8 @@ interface FloatingBarProps {
   /** 跳动频率档位（默认 10Hz）：只决定 jump 模式整串跳变的频率，roll 模式不看它。 */
   refreshHz?: RefreshHz;
   displayMode?: DisplayMode;
+  /** 当前主题：只影响吉祥物素材；配色与字体由 CSS 变量决定（见 src/theme/css.ts）。 */
+  theme?: Theme | null;
   now?: () => number;
 }
 
@@ -121,6 +126,7 @@ export function FloatingBar({
   decimals = DEFAULT_DECIMALS,
   refreshHz = DEFAULT_INPUT.refreshHz,
   displayMode = DEFAULT_INPUT.displayMode,
+  theme = null,
   now,
 }: FloatingBarProps) {
   const rollerRef = useRef<RollingIntHandle>(null);
@@ -128,6 +134,9 @@ export function FloatingBar({
   const intRef = useRef<HTMLSpanElement>(null);
   const fracRef = useRef<HTMLSpanElement>(null);
   const phaseRef = useRef<HTMLSpanElement>(null);
+  // 吉祥物状态机：notify 只写 ref，状态真的变化时才 setState 一次（无吉祥物的主题整条链路空转）。
+  const mascot = useMascot(theme);
+  const mascotNotify = mascot.notify;
 
   useEffect(() => {
     const host = {
@@ -155,10 +164,12 @@ export function FloatingBar({
           lastPhase = phase;
           if (phaseRef.current) phaseRef.current.textContent = phase;
         }
+        // 吉祥物：只把整数元文本与阶段交给状态机，滚轮与引擎一行没动。
+        mascotNotify(money.int, phase);
       },
       { refreshHz, decimals, displayMode },
     );
-  }, [settings, decimals, refreshHz, displayMode, now]);
+  }, [settings, decimals, refreshHz, displayMode, now, mascotNotify]);
 
   return (
     <div
@@ -201,9 +212,12 @@ export function FloatingBar({
         <span className="phase" ref={phaseRef}>
           —
         </span>
-        <span className="hint">
-          {formatMicro(settings.salaryMicro)} 元 / {formatMicro(settings.payDaysMicro)} 天 / {formatMicro(settings.hoursMicro)} 小时
-        </span>
+        <div className="bar-foot-meta">
+          <span className="hint">
+            {formatMicro(settings.salaryMicro)} 元 / {formatMicro(settings.payDaysMicro)} 天 / {formatMicro(settings.hoursMicro)} 小时
+          </span>
+          <MascotImage theme={theme} state={mascot.state} />
+        </div>
       </div>
     </div>
   );
