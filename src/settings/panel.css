@@ -1,25 +1,18 @@
-/* 设置面板：复用悬浮条的深色半透明语汇（rgba(14,16,22,.62) + blur 18px + 22px 圆角）。 */
-.settings-open {
-  font: inherit;
-  font-size: 12px;
-  color: rgba(226, 232, 240, 0.86);
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(14, 16, 22, 0.62);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  backdrop-filter: blur(18px) saturate(140%);
-  cursor: pointer;
-}
-
-.settings-open:hover {
-  border-color: rgba(160, 220, 255, 0.42);
-  color: #f2f4f8;
+/*
+ * 设置现在是独立窗口（430x540，带系统标题栏），不再嵌在 400x120 的悬浮条里：
+ * .settings-window 撑满窗口并自己负责纵向滚动，文档层（html/body）恒不滚动。
+ */
+.settings-window {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 12px;
+  overflow-y: auto;
+  background: #0d1016;
 }
 
 .settings-panel {
   box-sizing: border-box;
-  width: 400px;
+  width: 100%;
   padding: 16px 20px 14px;
   display: flex;
   flex-direction: column;

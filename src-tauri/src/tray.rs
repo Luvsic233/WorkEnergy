@@ -22,14 +22,14 @@ struct TrayMenu {
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let always_on_top_now = desktop::main_window(app)
         .and_then(|window| window.is_always_on_top().ok())
-        .unwrap_or(true);
+        .unwrap_or(false);
     let autostart_now = app.autolaunch().is_enabled().unwrap_or(false);
 
     let show_hide = MenuItem::with_id(app, ID_SHOW_HIDE, "显示 / 隐藏窗口", true, None::<&str>)?;
     let always_on_top = CheckMenuItem::with_id(
         app,
         ID_ALWAYS_ON_TOP,
-        "窗口置顶",
+        "总在最前",
         true,
         always_on_top_now,
         None::<&str>,
@@ -86,23 +86,68 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+pub fn sync_always_on_top(app: &AppHandle, value: bool) {
+    if let Some(state) = app.try_state::<TrayMenu>() {
+        if let Err(error) = state.always_on_top.set_checked(value) {
+            desktop::trace(&format!("tray: set_checked failed: {error}"));
+        }
+    }
+}
+
 fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
     handle_menu_id(app, event.id().as_ref());
 }
 
-/// Automated-check hook: exercises the very same handlers the tray menu calls,
-/// without a mouse. Only runs when `WE_DESKTOP_ACTION` is set; normal launches
-/// are unaffected.
+/// Automated-check hook: exercises the very same handlers the tray/bar menus
+/// call, without a mouse. Only runs when `WE_DESKTOP_ACTION` is set; normal
+/// launches are unaffected.
 pub fn run_startup_action(app: &AppHandle) {
     let Ok(action) = std::env::var("WE_DESKTOP_ACTION") else {
         return;
     };
+    // Run after the event loop is up: a menu click never happens during setup,
+    // and window-level flags (e.g. always-on-top) only take effect once the loop
+    // is running.
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(4000));
+        dispatch_action(&handle, &action);
+    });
+}
+
+fn dispatch_action(app: &AppHandle, action: &str) {
     desktop::trace(&format!("self-test: action {action}"));
-    match action.as_str() {
+    if crate::bar_menu::is_bar_id(action) {
+        crate::bar_menu::handle_id(app, action);
+        return;
+    }
+    match action {
         "show-hide" => handle_menu_id(app, ID_SHOW_HIDE),
         "always-on-top" => handle_menu_id(app, ID_ALWAYS_ON_TOP),
         "autostart" => handle_menu_id(app, ID_AUTOSTART),
         "quit" => handle_menu_id(app, ID_QUIT),
+        // Exercises the real page -> IPC -> Rust chain without a mouse:
+        // the webview itself invokes the hide command.
+        "eval-hide" => {
+            desktop::eval_self_test(app, "window.__TAURI__.core.invoke('hide_main')")
+        }
+        // Exercises the real contextmenu handler in the page: React's
+        // onContextMenu -> preventDefault -> invoke('show_bar_menu') -> native menu.
+        "eval-popup" => desktop::eval_self_test(
+            app,
+            "document.querySelector('.bar').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))",
+        ),
+        // Two settings requests in a row: the second one must reuse the window
+        // instead of creating a second one.
+        "settings-twice" => {
+            for attempt in 1..=2 {
+                let outcome = desktop::open_settings_window(app);
+                desktop::trace(&format!(
+                    "self-test: settings request {attempt} ok={:?}",
+                    outcome.is_ok()
+                ));
+            }
+        }
         other => desktop::trace(&format!("self-test: unknown action {other}")),
     }
 }
@@ -110,28 +155,13 @@ pub fn run_startup_action(app: &AppHandle) {
 fn handle_menu_id(app: &AppHandle, id: &str) {
     match id {
         ID_SHOW_HIDE => desktop::toggle_main_window(app),
-        ID_ALWAYS_ON_TOP => toggle_always_on_top(app),
+        ID_ALWAYS_ON_TOP => desktop::toggle_always_on_top(app),
         ID_AUTOSTART => toggle_autostart(app),
         ID_QUIT => {
             desktop::trace("tray: quit requested");
             app.exit(0);
         }
         other => desktop::trace(&format!("tray: unhandled menu id {other}")),
-    }
-}
-
-fn toggle_always_on_top(app: &AppHandle) {
-    let Some(window) = desktop::main_window(app) else {
-        return;
-    };
-    let current = window.is_always_on_top().unwrap_or(true);
-    let next = !current;
-    match window.set_always_on_top(next) {
-        Ok(()) => {
-            let _ = app.state::<TrayMenu>().always_on_top.set_checked(next);
-            desktop::trace(&format!("tray: always-on-top {current} -> {next}"));
-        }
-        Err(error) => desktop::trace(&format!("tray: always-on-top failed: {error}")),
     }
 }
 
@@ -144,7 +174,9 @@ fn toggle_autostart(app: &AppHandle) {
         autolaunch.enable()
     };
     let now = autolaunch.is_enabled().unwrap_or(false);
-    let _ = app.state::<TrayMenu>().autostart.set_checked(now);
+    if let Some(state) = app.try_state::<TrayMenu>() {
+        let _ = state.autostart.set_checked(now);
+    }
     desktop::trace(&format!(
         "tray: autostart {current} -> {now} (ok={}, error={:?})",
         result.is_ok(),

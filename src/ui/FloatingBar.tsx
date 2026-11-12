@@ -2,6 +2,7 @@ import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import type { Settings } from "../core/earning";
 import { DEFAULT_DECIMALS, formatMicro, type Decimals, type DigitColumns } from "../core/format";
 import { DEFAULT_INPUT, type DisplayMode, type RefreshHz } from "../core/settings";
+import { invoke } from "../settings/bridge";
 import { RollingDigit, type RollingDigitHandle } from "./RollingDigit";
 import { startTicker } from "./ticker";
 
@@ -121,7 +122,28 @@ export function FloatingBar({
   }, [settings, decimals, refreshHz, displayMode, now]);
 
   return (
-    <div className="bar">
+    <div
+      className="bar"
+      // deep：整条（含标签与阶段文字）都能按住拖动；button/input 这类可点击元素
+      // 仍然吞掉拖拽，所以 × 点得动，数字区也不会被拖拽吃掉点击。
+      data-tauri-drag-region="deep"
+      onContextMenu={(event) => {
+        // 关掉 WebView2 默认右键菜单，换成 Rust 侧弹出的原生菜单。
+        event.preventDefault();
+        void invoke("show_bar_menu");
+      }}
+    >
+      <button
+        type="button"
+        className="bar-close"
+        aria-label="隐藏到托盘"
+        title="隐藏到托盘"
+        onClick={() => {
+          void invoke("hide_main");
+        }}
+      >
+        ×
+      </button>
       <div className="bar-label">今日实时工资</div>
       {/* data-decimals / data-mode 给 CSS 用：按档位收窄字号、按显示方式切换对齐，保证 400px 条内不溢出。 */}
       <div className="bar-value" data-decimals={decimals} data-mode={displayMode}>
