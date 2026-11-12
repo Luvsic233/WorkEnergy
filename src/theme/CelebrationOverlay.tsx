@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "../settings/bridge";
 import { bundledPhotoUrl } from "./bundledPhotos";
 import { createCelebrationTimer } from "./celebration";
-import { celebrationGifUrl } from "./celebrationAsset";
+import { pickCelebrationUrl } from "./celebrationAsset";
 
 declare global {
   interface Window {
@@ -22,15 +22,17 @@ declare global {
   }
 }
 
-/** 要显示的图：内置 GIF → 内置静态猫图 → null（整块不渲染，不白屏、不破图）。 */
-export function celebrationSrc(): string | null {
-  const gif = celebrationGifUrl();
+/** 要显示的图：随机一张内置动图 → 内置静态猫图 → null（整块不渲染，不白屏、不破图）。 */
+export function celebrationSrc(random: () => number = Math.random): string | null {
+  const gif = pickCelebrationUrl(random);
   if (gif !== null) return gif;
   return bundledPhotoUrl("milestone");
 }
 
 export function CelebrationOverlay() {
   const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
+  // 每次触发都重新抽一张（首帧抽一次，之后每次 ping 再抽）。
+  const [gif, setGif] = useState<string | null>(() => pickCelebrationUrl());
 
   useEffect(() => {
     // 到点让 Rust 侧把窗口隐藏（不销毁）：下一次跨越直接复用同一个 webview。
@@ -40,6 +42,9 @@ export function CelebrationOverlay() {
     timer.arm();
     // 露出期间再次触发（第二个 20 元台阶在 4 秒内跨过）：重新计时，保持显示。
     window.__WE_CELEBRATE_PING__ = () => {
+      // 重新抽一张：这就是"每次随机播一个"。
+      setBrokenSrc(null);
+      setGif(pickCelebrationUrl());
       timer.arm();
     };
     return () => {
@@ -48,7 +53,6 @@ export function CelebrationOverlay() {
     };
   }, []);
 
-  const gif = celebrationGifUrl();
   const fallback = bundledPhotoUrl("milestone");
   // GIF 加载失败（占位文件 / 格式不支持）时退到静态猫图，而不是留一个破图。
   const src =

@@ -7,6 +7,8 @@ const sources = vi.hoisted(() => ({ gif: null as string | null, bundled: null as
 
 vi.mock("./celebrationAsset", () => ({
   celebrationGifUrl: () => sources.gif,
+  pickCelebrationUrl: () => sources.gif,
+  celebrationGifUrls: () => (sources.gif === null ? [] : [sources.gif]),
 }));
 
 vi.mock("./bundledPhotos", () => ({
