@@ -103,6 +103,25 @@ export function hasShell(): boolean {
   return typeof runtime()?.core?.invoke === "function";
 }
 
+/**
+ * 列出某个目录下的文件名（不含子目录）。photo-left 版式用它扫用户放图的那个目录。
+ * 浏览器预览 / 权限没开 / 目录不存在一律返回 []：调用方据此退化成纯色块，不报错。
+ */
+export async function listDirFiles(dir: string): Promise<string[]> {
+  const invoke = runtime()?.core?.invoke;
+  if (!invoke) return [];
+  try {
+    const entries = await invoke("plugin:fs|read_dir", { path: dir, options: {} });
+    if (!Array.isArray(entries)) return [];
+    return (entries as DirEntry[])
+      .filter((entry) => entry?.isDirectory !== true && typeof entry.name === "string")
+      .map((entry) => String(entry.name));
+  } catch {
+    logTheme(`读不到图片目录 ${dir}（外壳未启用 fs 能力 / 目录不存在），左图退化为纯色块`, "list-photo-dir");
+    return [];
+  }
+}
+
 /** 应用数据目录（%APPDATA%\com.workenergy.shell）；浏览器里返回 null。 */
 export async function appDataDirOf(): Promise<string | null> {
   const api = runtime()?.path;

@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { parseSettings } from "./core/earning";
 import { DEFAULT_INPUT, validateInput, type RawInput } from "./core/settings";
-import { applySizePreset, applyStartupSizePreset, emit, invoke, listen } from "./settings/bridge";
+import { emit, invoke, listen } from "./settings/bridge";
 import { localStorageAdapter, readStoredSizePreset } from "./settings/storage";
+import { DEFAULT_THEME_ID, FALLBACK_THEME, builtinTheme } from "./theme/builtin";
 import { applyStoredTheme } from "./theme/css";
+import { readStoredThemeId } from "./theme/storage";
 import { useThemes } from "./theme/useThemes";
+import { applyStartupThemeWindowSize, applyThemeWindowSize } from "./theme/windowSize";
 import { FloatingBar } from "./ui/FloatingBar";
 import { SettingsPanel } from "./ui/SettingsPanel";
 
@@ -22,8 +25,14 @@ function inSettingsWindow(): boolean {
  * 先藏住内容、等窗口尺寸真正落地（或 150ms 兜底）再显示。
  * 于是"第一眼"看到的就是目标档的窗口尺寸与目标档的排版，不会先按 tauri.conf.json 的
  * 400x120 画一遍再突然收缩。设置窗口（430x540 带系统标题栏）不参与缩窗。
+ *
+ * 固定尺寸主题（内置 maodie = 340x96）走同一条时序，只是尺寸来自主题而不是档位；
+ * 此时用户主题还没扫，只认内置主题，扫完由下面的 effect 补上真正的选择。
  */
-if (!inSettingsWindow()) applyStartupSizePreset(readStoredSizePreset());
+if (!inSettingsWindow()) {
+  const startupTheme = builtinTheme(readStoredThemeId() ?? DEFAULT_THEME_ID) ?? FALLBACK_THEME;
+  applyStartupThemeWindowSize(startupTheme, readStoredSizePreset());
+}
 
 /*
  * 主题同理：React 挂载之前先把"已保存的主题"落到 CSS 变量上（此时用户主题还没扫，
@@ -69,10 +78,12 @@ function FloatingWindow() {
   );
 
   // 设置窗口保存后跨窗口事件会重读档位：CSS 立即缩放、窗口尺寸跟着改，不需要重启。
+  // 换主题同理：固定尺寸主题（耄耋猫 340x96）优先，其余主题仍按档位预设。
   const sizePreset = savedInput.sizePreset;
+  const theme = themes.current;
   useEffect(() => {
-    applySizePreset(sizePreset);
-  }, [sizePreset]);
+    applyThemeWindowSize(theme, sizePreset);
+  }, [theme, sizePreset]);
 
   return (
     <main className="stage">
@@ -81,7 +92,7 @@ function FloatingWindow() {
         decimals={savedInput.decimals}
         refreshHz={savedInput.refreshHz}
         displayMode={savedInput.displayMode}
-        theme={themes.current}
+        theme={theme}
       />
     </main>
   );

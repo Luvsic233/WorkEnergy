@@ -33,6 +33,18 @@ export type ThemeMascot = Partial<Record<MascotState, string>>;
 /** 主题来源：内置（写在前端代码里）/ 用户目录（%APPDATA%\com.workenergy.shell\themes）。 */
 export type ThemeSource = "builtin" | "user";
 
+/**
+ * 悬浮条版式：classic = 现在的扁横条（默认 / 极简 / 全部用户主题），
+ * photo-left = 左侧一张按条高缩放的图片 + 右侧标签/金额/阶段（只有内置 maodie 用）。
+ */
+export type BarLayout = "classic" | "photo-left";
+
+/** 主题固定的窗口逻辑尺寸（只有内置主题会带）。 */
+export interface ThemeWindow {
+  width: number;
+  height: number;
+}
+
 export interface Theme {
   /** 稳定 id：内置是 default / minimal，用户主题是 user:<目录名>。 */
   id: string;
@@ -50,4 +62,12 @@ export interface Theme {
   font: string;
   /** 没有任何一项可用素材时是 null：此时吉祥物区域整块不渲染。 */
   mascot: ThemeMascot | null;
+  /*
+   * 下面两个字段**只有内置主题**会填（见 builtin.ts）：它们不是 theme.json 的一部分，
+   * parse.ts 从不读 theme.json 里的这两个键，用户主题因此永远落在 undefined →
+   * 版式 classic、窗口尺寸跟随用户选的三档预设。
+   */
+  layout?: BarLayout;
+  /** 固定窗口尺寸：有值时窗口按它走，设置面板里的三档预设置灰。 */
+  windowSize?: ThemeWindow | null;
 }

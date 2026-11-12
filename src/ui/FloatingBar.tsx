@@ -10,6 +10,8 @@ import {
 import { DEFAULT_INPUT, type DisplayMode, type RefreshHz } from "../core/settings";
 import { invoke } from "../settings/bridge";
 import { MascotImage } from "../theme/MascotImage";
+import { PhotoArt } from "../theme/PhotoArt";
+import { layoutOf } from "../theme/layout";
 import type { Theme } from "../theme/types";
 import { useMascot } from "../theme/useMascot";
 import { DigitCell, FracCell, type DigitCellHandle, type FracCellHandle } from "./RollingDigit";
@@ -116,7 +118,10 @@ interface FloatingBarProps {
   /** 跳动频率档位（默认 10Hz）：只决定 jump 模式整串跳变的频率，roll 模式不看它。 */
   refreshHz?: RefreshHz;
   displayMode?: DisplayMode;
-  /** 当前主题：只影响吉祥物素材；配色与字体由 CSS 变量决定（见 src/theme/css.ts）。 */
+  /**
+   * 当前主题：配色与字体由 CSS 变量决定（见 src/theme/css.ts）；
+   * 另外内置 maodie 主题带 layout = photo-left，按它切换整条版式。
+   */
   theme?: Theme | null;
   now?: () => number;
 }
@@ -171,47 +176,83 @@ export function FloatingBar({
     );
   }, [settings, decimals, refreshHz, displayMode, now, mascotNotify]);
 
+  // 两个版式共用的两块：数字区与阶段文字（滚轮 / ticker / 每帧 paint 一行都没动）。
+  const valueBlock = (
+    /* data-decimals / data-mode 给 CSS 用：按档位收窄字号、按显示方式切换对齐，保证条宽内不溢出。 */
+    <div className="bar-value" data-decimals={decimals} data-mode={displayMode}>
+      {displayMode === "roll" ? <RollingInt ref={rollerRef} /> : <span className="int" ref={intRef}>0</span>}
+      <span className="dot">.</span>
+      {displayMode === "roll" ? (
+        <RollingFrac decimals={decimals} ref={fracRollerRef} />
+      ) : (
+        <span className="frac" ref={fracRef}>
+          {"0".repeat(decimals)}
+        </span>
+      )}
+      <span className="unit">元</span>
+    </div>
+  );
+  const phaseBlock = (
+    <span className="phase" ref={phaseRef}>
+      —
+    </span>
+  );
+
+  const handleContextMenu = (event: { preventDefault(): void }) => {
+    // 关掉 WebView2 默认右键菜单，换成 Rust 侧弹出的原生菜单。
+    event.preventDefault();
+    void invoke("show_bar_menu");
+  };
+
+  const closeButton = (
+    <button
+      type="button"
+      className="bar-close"
+      aria-label="隐藏到托盘"
+      title="隐藏到托盘"
+      onClick={() => {
+        void invoke("hide_main");
+      }}
+    >
+      ×
+    </button>
+  );
+
+  // photo-left（内置 maodie）：左侧一张按条高缩放的图（右缘渐变淡出），右侧只有标签 + 金额 + 阶段。
+  if (layoutOf(theme) === "photo-left") {
+    return (
+      <div
+        className="bar"
+        data-layout="photo-left"
+        // deep：整条（含标签与阶段文字）都能按住拖动；button/input 这类可点击元素
+        // 仍然吞掉拖拽，所以 × 点得动，数字区也不会被拖拽吃掉点击。
+        data-tauri-drag-region="deep"
+        onContextMenu={handleContextMenu}
+      >
+        {closeButton}
+        <PhotoArt state={mascot.state} />
+        <div className="bar-photo-main">
+          <div className="bar-label">今日实时工资</div>
+          {valueBlock}
+          <div className="bar-foot">{phaseBlock}</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="bar"
       // deep：整条（含标签与阶段文字）都能按住拖动；button/input 这类可点击元素
       // 仍然吞掉拖拽，所以 × 点得动，数字区也不会被拖拽吃掉点击。
       data-tauri-drag-region="deep"
-      onContextMenu={(event) => {
-        // 关掉 WebView2 默认右键菜单，换成 Rust 侧弹出的原生菜单。
-        event.preventDefault();
-        void invoke("show_bar_menu");
-      }}
+      onContextMenu={handleContextMenu}
     >
-      <button
-        type="button"
-        className="bar-close"
-        aria-label="隐藏到托盘"
-        title="隐藏到托盘"
-        onClick={() => {
-          void invoke("hide_main");
-        }}
-      >
-        ×
-      </button>
+      {closeButton}
       <div className="bar-label">今日实时工资</div>
-      {/* data-decimals / data-mode 给 CSS 用：按档位收窄字号、按显示方式切换对齐，保证 400px 条内不溢出。 */}
-      <div className="bar-value" data-decimals={decimals} data-mode={displayMode}>
-        {displayMode === "roll" ? <RollingInt ref={rollerRef} /> : <span className="int" ref={intRef}>0</span>}
-        <span className="dot">.</span>
-        {displayMode === "roll" ? (
-          <RollingFrac decimals={decimals} ref={fracRollerRef} />
-        ) : (
-          <span className="frac" ref={fracRef}>
-            {"0".repeat(decimals)}
-          </span>
-        )}
-        <span className="unit">元</span>
-      </div>
+      {valueBlock}
       <div className="bar-foot">
-        <span className="phase" ref={phaseRef}>
-          —
-        </span>
+        {phaseBlock}
         <div className="bar-foot-meta">
           <span className="hint">
             {formatMicro(settings.salaryMicro)} 元 / {formatMicro(settings.payDaysMicro)} 天 / {formatMicro(settings.hoursMicro)} 小时

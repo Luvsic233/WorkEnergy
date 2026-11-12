@@ -66,7 +66,7 @@ describe("扫描用户主题目录（根目录由参数注入）", () => {
 
   it("returns built-ins when the root is empty or the IO blows up", async () => {
     const empty = await loadThemeCatalog(createMemoryThemeIo({}), ROOT);
-    expect(empty.themes.map((theme) => theme.id)).toEqual(["default", "minimal"]);
+    expect(empty.themes.map((theme) => theme.id)).toEqual(["default", "minimal", "maodie"]);
 
     const failing = {
       listDirs: async () => {
@@ -96,7 +96,7 @@ describe("重名优先级", () => {
 
     const catalog = await loadThemeCatalog(io, ROOT);
 
-    expect(catalog.themes.map((theme) => theme.id)).toEqual(["default", "minimal"]);
+    expect(catalog.themes.map((theme) => theme.id)).toEqual(["default", "minimal", "maodie"]);
     expect(catalog.logs.join()).toContain("跳过 fake-minimal：显示名与已有主题重名");
   });
 
@@ -121,7 +121,7 @@ describe("重名优先级", () => {
 
     const catalog = buildCatalog(user);
 
-    expect(catalog.themes.map((theme) => theme.id)).toEqual(["default", "minimal", "user:a", "user:b"]);
+    expect(catalog.themes.map((theme) => theme.id)).toEqual(["default", "minimal", "maodie", "user:a", "user:b"]);
     expect(catalog.dropped).toEqual([]);
   });
 });

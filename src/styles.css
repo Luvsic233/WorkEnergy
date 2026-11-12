@@ -416,3 +416,127 @@ body {
   opacity: 1;
   background: rgba(248, 113, 113, 0.72);
 }
+
+/*
+ * ---------------------------------------------------------------------------
+ * photo-left 版式（只服务内置主题「耄耋猫」，由 FloatingBar 按 theme.layout 分支渲染）
+ *
+ * 左侧一张按条高（96px）等比缩放的图片，右缘用渐变淡出接到卡片底色；右侧是
+ * 「标签 + 金额（滚轮格子）+ 阶段」。图片缺失时容器本身就是一个纯色块（背景 = 卡片底色），
+ * 不白屏、不报错、也不影响右侧排版。字号一律写死像素：这个版式的窗口是固定 340x96，
+ * 不参与 --bar-scale 的三档缩放。
+ * ---------------------------------------------------------------------------
+ */
+.bar[data-layout="photo-left"] {
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 0 10px 0 0;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/*
+ * 左图：贴左、占满条高、宽度跟着图片原比例走；超出 34% 就按 contain 收进去（不裁不拉伸）。
+ * width 写死 96px：没有图片时这块仍然是一个 96x94 的纯色块（缺图不白屏、右侧排版不动）；
+ * 有图片时它只是"最多占多宽"，实际宽度仍由图片原比例决定。
+ */
+.bar[data-layout="photo-left"] .bar-photo-art {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 96px;
+  max-width: 34%;
+  margin-right: -6px;
+  background: var(--theme-bar-bg, #f7f0e3);
+  /* 右缘淡出：图片与卡片底色之间没有硬边。 */
+  -webkit-mask-image: linear-gradient(to right, #000 66%, rgba(0, 0, 0, 0) 100%);
+  mask-image: linear-gradient(to right, #000 66%, rgba(0, 0, 0, 0) 100%);
+  pointer-events: none;
+}
+
+.bar[data-layout="photo-left"] .bar-photo-img {
+  display: block;
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: left center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 右侧文字区：min-width: 0 让它在窄条里可以收缩，不会被 nowrap 的数字撑出去。 */
+.bar[data-layout="photo-left"] .bar-photo-main {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  margin-left: -8px;
+}
+
+.bar[data-layout="photo-left"] .bar-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+
+.bar[data-layout="photo-left"] .bar-value {
+  gap: 1px;
+}
+
+.bar[data-layout="photo-left"] .bar-value .int,
+.bar[data-layout="photo-left"] .bar-value .int-group {
+  font-size: 24px;
+  letter-spacing: 0.3px;
+}
+
+/* 18 位档：整数区收到 22px、小数区 11px —— 340px 条宽里最长的组合也不溢出（实测见验证记录）。 */
+.bar[data-layout="photo-left"] .bar-value[data-decimals="18"] .int-group,
+.bar[data-layout="photo-left"] .bar-value[data-decimals="18"] .int {
+  font-size: 22px;
+}
+
+.bar[data-layout="photo-left"] .bar-value[data-decimals="18"] .frac,
+.bar[data-layout="photo-left"] .bar-value[data-decimals="18"] .frac-group {
+  font-size: 11px;
+}
+
+.bar[data-layout="photo-left"] .bar-value[data-decimals="12"] .frac,
+.bar[data-layout="photo-left"] .bar-value[data-decimals="12"] .frac-group {
+  font-size: 12px;
+}
+
+.bar[data-layout="photo-left"] .bar-value[data-decimals="6"] .frac,
+.bar[data-layout="photo-left"] .bar-value[data-decimals="6"] .frac-group {
+  font-size: 13px;
+}
+
+.bar[data-layout="photo-left"] .bar-value .dot {
+  font-size: 15px;
+}
+
+.bar[data-layout="photo-left"] .bar-value .unit {
+  margin-left: 2px;
+  font-size: 10px;
+}
+
+.bar[data-layout="photo-left"] .bar-foot {
+  justify-content: flex-start;
+  font-size: 10px;
+}
+
+.bar[data-layout="photo-left"] .bar-close {
+  top: 4px;
+  right: 5px;
+  width: 14px;
+  height: 14px;
+  font-size: 11px;
+}

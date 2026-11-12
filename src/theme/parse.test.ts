@@ -133,9 +133,9 @@ describe("theme.json 校验：非法主题被忽略且不抛错", () => {
 });
 
 describe("内置主题解析", () => {
-  it("parses both built-in sources through the same parser", () => {
-    expect(BUILTIN_THEME_SOURCES).toHaveLength(2);
-    expect(BUILTIN_THEMES).toHaveLength(2);
+  it("parses every built-in source through the same parser", () => {
+    expect(BUILTIN_THEME_SOURCES).toHaveLength(3);
+    expect(BUILTIN_THEMES).toHaveLength(3);
     for (const [index, source] of BUILTIN_THEME_SOURCES.entries()) {
       expect(BUILTIN_THEMES[index]?.id).toBe(source.id);
       expect(BUILTIN_THEMES[index]?.source).toBe("builtin");

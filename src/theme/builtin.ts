@@ -5,20 +5,33 @@
  * 于是"缺省回退"只有一份实现，不存在两套规则。
  */
 import { DEFAULT_FONT, parseTheme } from "./parse";
-import type { Theme } from "./types";
+import type { BarLayout, Theme, ThemeWindow } from "./types";
 
 /** 默认主题 id：找不到已保存的主题时用它，也是首次启动的外观。 */
 export const DEFAULT_THEME_ID = "default";
 
+/** 内置「耄耋猫」主题 id：photo-left 版式 + 固定 340x96 窗口。 */
+export const MAODIE_THEME_ID = "maodie";
+
+/** 内置 maodie 的窗口尺寸（与 FloatingBar 的 photo-left 版式配套，写死在这里）。 */
+export const MAODIE_WINDOW: ThemeWindow = { width: 340, height: 96 };
+
 interface BuiltinSource {
   id: string;
   json: unknown;
+  /**
+   * 版式与固定窗口尺寸**只在代码里给内置主题**，绝不进 theme.json 的解析路径：
+   * parse.ts 不读这两个键，用户目录里的 theme.json 写它们也不会生效（见 types.ts 的注释）。
+   */
+  layout?: BarLayout;
+  windowSize?: ThemeWindow | null;
 }
 
 /**
- * 两套内置主题的原文。
+ * 三套内置主题的原文。
  * default = v0.1.0 的深色外观（颜色与旧样式表逐项相等，切主题之前之后看起来一模一样）；
- * minimal = 极简浅色，无吉祥物。
+ * minimal = 极简浅色，无吉祥物；
+ * maodie = 「耄耋猫」，奶油底 + 橙色数字，photo-left 版式（左图右数字），窗口固定 340x96。
  */
 export const BUILTIN_THEME_SOURCES: readonly BuiltinSource[] = [
   {
@@ -57,13 +70,51 @@ export const BUILTIN_THEME_SOURCES: readonly BuiltinSource[] = [
       font: DEFAULT_FONT,
     },
   },
+  {
+    id: MAODIE_THEME_ID,
+    layout: "photo-left",
+    windowSize: MAODIE_WINDOW,
+    json: {
+      name: "耄耋猫",
+      // 与 themes/maodie/theme.json 的配色逐项相同（用户先前预览选定的那一套）。
+      colors: {
+        bar: "rgba(247, 240, 227, 0.92)",
+        border: "rgba(120, 72, 30, 0.18)",
+        label: "rgba(138, 107, 79, 0.9)",
+        int: "#c2601f",
+        frac: "#d98a3f",
+        unit: "rgba(176, 138, 99, 0.92)",
+        dot: "#c2601f",
+        phase: "rgba(122, 91, 63, 0.85)",
+        hint: "rgba(160, 132, 100, 0.8)",
+      },
+      font: '"Segoe UI", system-ui, sans-serif',
+      /*
+       * 状态机开关：useMascot 只在 theme.mascot 非空时才推状态（idle / offwork /
+       * overtime / milestone），photo-left 的左图跟着这个状态换图 —— 所以这里必须给出映射。
+       * 内置主题没有目录（baseDir = null），mascotUrlOf 永远返回 null，因此这套文件名
+       * 不会去拼任何 asset 地址；真正的文件由 photoLeft.ts 到用户目录里按同一套状态名找。
+       */
+      mascot: {
+        idle: "kitty-idle.webp",
+        offwork: "kitty-offwork.webp",
+        overtime: "kitty-overtime.webp",
+        milestone: "kitty-happy.webp",
+      },
+    },
+  },
 ];
 
 function build(source: BuiltinSource): Theme {
   const { theme } = parseTheme(source.json, { id: source.id, source: "builtin" });
   // 内置主题是代码里的常量：解析失败说明常量写坏了，应当被单测立刻抓住，不在运行时静默降级。
   if (!theme) throw new Error(`内置主题 ${source.id} 解析失败`);
-  return theme;
+  // 两个内置专属字段永远显式给出：其它主题读到时是 undefined，一律按经典版式处理。
+  return {
+    ...theme,
+    layout: source.layout ?? "classic",
+    windowSize: source.windowSize ?? null,
+  };
 }
 
 export const BUILTIN_THEMES: readonly Theme[] = BUILTIN_THEME_SOURCES.map(build);

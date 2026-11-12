@@ -13,6 +13,7 @@ import {
 } from "../core/settings";
 import type { StorageAdapter } from "../settings/storage";
 import { BUILTIN_THEMES, DEFAULT_THEME_ID } from "../theme/builtin";
+import { windowSizeOf } from "../theme/layout";
 import type { Theme } from "../theme/types";
 import "../settings/panel.css";
 
@@ -139,6 +140,13 @@ export function SettingsPanel({
   const { errors, settings } = useMemo(() => validateInput(draft), [draft]);
   const hourly = settings ? formatAtoms(hourlyAtoms(settings)) : null;
 
+  /*
+   * 固定尺寸主题（内置「耄耋猫」340x96）：窗口尺寸三档对它不起作用，
+   * 置灰并把"固定多少"写清楚；值本身照旧显示，切回别的主题时原选择还在。
+   */
+  const activeTheme = themes.find((candidate) => candidate.id === themeId) ?? null;
+  const fixedWindow = windowSizeOf(activeTheme);
+
   if (!open) return null;
 
   function update<K extends keyof RawInput>(key: K, value: RawInput[K]) {
@@ -218,7 +226,12 @@ export function SettingsPanel({
           options={SIZE_PRESET_OPTIONS}
           value={draft.sizePreset}
           error={errors.sizePreset}
-          hint={`${sizePresetSpec(draft.sizePreset).width} × ${sizePresetSpec(draft.sizePreset).height} 逻辑像素（内容 ${sizePresetSpec(draft.sizePreset).scale} 倍），保存后立即生效，无需重启`}
+          disabled={fixedWindow !== null}
+          hint={
+            fixedWindow !== null
+              ? `该主题固定 ${fixedWindow.width} × ${fixedWindow.height} 逻辑像素；切回其它主题后恢复上面的档位`
+              : `${sizePresetSpec(draft.sizePreset).width} × ${sizePresetSpec(draft.sizePreset).height} 逻辑像素（内容 ${sizePresetSpec(draft.sizePreset).scale} 倍），保存后立即生效，无需重启`
+          }
           format={(option) => sizePresetSpec(option).label}
           onChange={(value) => update("sizePreset", value)}
         />
