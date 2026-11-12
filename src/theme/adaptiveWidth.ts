@@ -178,6 +178,11 @@ export function useAdaptiveCardWidth(enabled: boolean, refs: AdaptiveRefs) {
 
   useEffect(() => {
     if (!enabled) return;
+    // 进入 photo-left 版式时把「上次生效的宽度」作废：
+    // 主题窗口尺寸（340x96）刚被设过，缓存里还存着上一次的 283，
+    // 差值小于阈值就会让自适应提前放弃，于是窗口停在 340 —— 这就是「换回耄耋尺寸不对」。
+    appliedWidth.current = 0;
+    recentResizes.current = [];
     tracker.current.reset();
     schedule();
     return () => {
