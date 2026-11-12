@@ -54,7 +54,16 @@ body {
   white-space: nowrap;
 }
 
-.bar-value .int {
+/*
+ * 滚动模式（roll）下每一组都是"被裁切的 1em 格子"的横排，裁切元素的基线就是它的下边沿，
+ * 所以整行改用 flex-end 对齐：所有格子高度都是 1em，下边沿对齐即数字基线对齐。
+ */
+.bar-value[data-mode="roll"] {
+  align-items: flex-end;
+}
+
+.bar-value .int,
+.bar-value .int-group {
   font-size: 46px;
   font-weight: 650;
   letter-spacing: 0.5px;
@@ -65,7 +74,8 @@ body {
   opacity: 0.55;
 }
 
-.bar-value .frac {
+.bar-value .frac,
+.bar-value .frac-group {
   font-size: 17px;
   font-weight: 500;
   color: rgba(160, 220, 255, 0.92);
@@ -76,16 +86,78 @@ body {
  * 叠加 6 位整数（46px 字号约 175px）必然溢出。按位数收窄小数区字号，保持整数区的主导地位，
  * 同时保证 18 位时不会有水平溢出或裁切（不淡化、不换行、不裁字）。
  */
-.bar-value[data-decimals="18"] .frac {
-  font-size: 14px;
+.bar-value[data-decimals="18"] .frac,
+.bar-value[data-decimals="18"] .frac-group {
+  font-size: 13px;
 }
 
-.bar-value[data-decimals="12"] .frac {
+.bar-value[data-decimals="12"] .frac,
+.bar-value[data-decimals="12"] .frac-group {
   font-size: 16px;
 }
 
-.bar-value[data-decimals="6"] .frac {
+.bar-value[data-decimals="6"] .frac,
+.bar-value[data-decimals="6"] .frac-group {
   font-size: 17px;
+}
+
+/*
+ * 18 位档的小数区有 18 列，整数区还必须容下 7 位（9999999 元）而不溢出 400px 条：
+ * 在 18 位档把整数区收到 40px，两级字号一起给最长的组合留出余量。
+ */
+.bar-value[data-decimals="18"] .int-group {
+  font-size: 40px;
+}
+
+.bar-value .int-group,
+.bar-value .frac-group {
+  display: flex;
+  align-items: flex-end;
+  line-height: 1;
+}
+
+/*
+ * 机械计数器的一位：一条一格高的裁切窗口，内部滚条按 (digit + progress) 格位移。
+ * 位移单位取 em，整数区（大字）与小数区（小字）共用同一份位移逻辑，不需要测量像素高度。
+ */
+.bar-value .wheel {
+  flex: 0 0 auto;
+  display: inline-block;
+  /* 格高 = 一个数字的滚动步长，必须与 RollingDigit 的 PITCH_EM 一致。字形墨迹只占行盒的
+     0.7em，格子收到 0.8em 后相邻两格几乎相接，滚到中间时不会留一条空带把两个半字撕开。 */
+  height: 0.8em;
+  overflow: hidden;
+  letter-spacing: 0;
+  line-height: 1;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.6) 0,
+    #000 7%,
+    #000 93%,
+    rgba(0, 0, 0, 0.6) 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.6) 0,
+    #000 7%,
+    #000 93%,
+    rgba(0, 0, 0, 0.6) 100%
+  );
+}
+
+/* 逐帧被 transform 的元素：单独一层合成，位移不触发 layout / paint。 */
+.bar-value .wheel-track {
+  display: block;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.bar-value .wheel-glyph {
+  display: block;
+  /* 行盒与格高相同：墨迹在格内居中，上下各留约 0.05em 的余量，正好不切字。 */
+  height: 0.8em;
+  line-height: 0.8em;
+  text-align: center;
 }
 
 .bar-value .unit {

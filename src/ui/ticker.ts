@@ -1,6 +1,13 @@
 import { earnedAtoms, paidMsOf, phaseOf, type Phase, type Settings } from "../core/earning";
-import { DEFAULT_DECIMALS, formatAtoms, type Decimals, type MoneyParts } from "../core/format";
-import type { RefreshHz } from "../core/settings";
+import {
+  DEFAULT_DECIMALS,
+  digitColumns,
+  formatAtoms,
+  type Decimals,
+  type DigitColumns,
+  type MoneyParts,
+} from "../core/format";
+import type { DisplayMode, RefreshHz } from "../core/settings";
 
 export interface TickerHost {
   now(): number;
@@ -11,6 +18,8 @@ export interface TickerHost {
 export interface TickerFrame {
   money: MoneyParts;
   phase: Phase;
+  /** 每一位的 {digit, progress}；roll 模式拿它写滚条位移，jump 模式只要 money。 */
+  columns: DigitColumns;
 }
 
 export interface TickerOptions {
@@ -18,6 +27,11 @@ export interface TickerOptions {
   refreshHz?: RefreshHz;
   /** 小数位数档位，默认 12 位。 */
   decimals?: Decimals;
+  /**
+   * 显示方式，默认 roll：每帧都推进滚条，此时 refreshHz 不生效。
+   * jump 时沿用 refreshHz 节流，整串数字按档位整跳。
+   */
+  displayMode?: DisplayMode;
 }
 
 /** 两次重绘之间的最小间隔（ms）。60Hz 返回 0，表示每帧都写。 */
@@ -39,9 +53,12 @@ export function shouldRender(nowMs: number, lastMs: number | null, refreshHz: Re
 
 /** 数值按毫秒精确计算（不受节流影响），只有 DOM 写入被 startTicker 控制节奏。 */
 export function computeFrame(settings: Settings, nowMs: number, decimals: Decimals = DEFAULT_DECIMALS): TickerFrame {
+  const atoms = earnedAtoms(settings, paidMsOf(settings, nowMs));
   return {
-    money: formatAtoms(earnedAtoms(settings, paidMsOf(settings, nowMs)), decimals),
+    money: formatAtoms(atoms, decimals),
     phase: phaseOf(settings, nowMs),
+    // 滚条位移的原料：同一份 atoms 用 BigInt 拆位，金额本身不经过浮点。
+    columns: digitColumns(atoms, decimals),
   };
 }
 
@@ -53,6 +70,7 @@ export function startTicker(
 ): () => void {
   const refreshHz = options.refreshHz ?? 60;
   const decimals = options.decimals ?? DEFAULT_DECIMALS;
+  const displayMode = options.displayMode ?? "roll";
   let handle = 0;
   let stopped = false;
   let lastMs: number | null = null;
@@ -60,7 +78,8 @@ export function startTicker(
   const step = () => {
     if (stopped) return;
     const nowMs = host.now();
-    if (shouldRender(nowMs, lastMs, refreshHz)) {
+    // roll：每帧都画（刷新档位不参与判断，丝滑来自 60fps 的逐帧位移）；jump：按档位整跳。
+    if (displayMode === "roll" || shouldRender(nowMs, lastMs, refreshHz)) {
       lastMs = nowMs;
       onFrame(computeFrame(settings, nowMs, decimals));
     }

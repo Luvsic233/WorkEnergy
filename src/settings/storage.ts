@@ -1,7 +1,9 @@
 import {
   DECIMALS_OPTIONS,
   DEFAULT_INPUT,
+  DISPLAY_MODE_OPTIONS,
   REFRESH_HZ_OPTIONS,
+  type DisplayMode,
   type RawInput,
   type RefreshHz,
 } from "../core/settings";
@@ -34,12 +36,18 @@ function flag(record: Record<string, unknown>, key: keyof RawInput, fallback: bo
 /**
  * 枚举型字段：只有落在面板档位里的值才采用，别的（老版本、手改、类型不对）一律回落默认。
  * 小数位数的白名单就是 DECIMALS_OPTIONS = 18 / 12 / 6，默认 18；老记录里 12 / 6 仍是合法档位故保留原选择，
- * 不在白名单里的值（例如上一版的 3）回落 18。
+ * 不在白名单里的值（例如上一版的 3）回落 18。显示方式的白名单是 roll / jump，默认 roll。
+ * 字符串型记录（"6" / "60"）不算命中档位，照样回落默认。
  */
-function option<T extends number>(record: Record<string, unknown>, key: keyof RawInput, allowed: readonly T[], fallback: T): T {
+function option<T extends number | string>(
+  record: Record<string, unknown>,
+  key: keyof RawInput,
+  allowed: readonly T[],
+  fallback: T,
+): T {
   const value = record[key];
-  if (typeof value !== "number") return fallback;
-  return (allowed as readonly number[]).includes(value) ? (value as T) : fallback;
+  if (typeof value !== "number" && typeof value !== "string") return fallback;
+  return (allowed as readonly (number | string)[]).includes(value) ? (value as T) : fallback;
 }
 
 /** 老版本 / 缺字段 / 类型不对的记录一律补默认值，不让它把面板炸掉。 */
@@ -58,6 +66,7 @@ export function normalizeRawInput(value: unknown): RawInput | null {
     overtimeMode: flag(record, "overtimeMode", DEFAULT_INPUT.overtimeMode),
     decimals: option<Decimals>(record, "decimals", DECIMALS_OPTIONS, DEFAULT_INPUT.decimals),
     refreshHz: option<RefreshHz>(record, "refreshHz", REFRESH_HZ_OPTIONS, DEFAULT_INPUT.refreshHz),
+    displayMode: option<DisplayMode>(record, "displayMode", DISPLAY_MODE_OPTIONS, DEFAULT_INPUT.displayMode),
   };
 }
 

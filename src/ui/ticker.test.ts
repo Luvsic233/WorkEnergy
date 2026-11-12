@@ -118,7 +118,7 @@ describe("startTicker", () => {
 
   it("keeps ticking every frame but only paints at 10Hz", () => {
     const bench = harness(at(10, 0), 16);
-    startTicker(bench.host, settings, record(bench), { refreshHz: 10 });
+    startTicker(bench.host, settings, record(bench), { refreshHz: 10, displayMode: "jump" });
 
     bench.run(600); // 600 帧 × 16ms = 9600ms 的挂钟时间
 
@@ -132,7 +132,7 @@ describe("startTicker", () => {
 
   it("paints at 1Hz when the slowest tier is chosen", () => {
     const bench = harness(at(10, 0), 16);
-    startTicker(bench.host, settings, record(bench), { refreshHz: 1 });
+    startTicker(bench.host, settings, record(bench), { refreshHz: 1, displayMode: "jump" });
 
     bench.run(750); // 12000ms
 
@@ -153,6 +153,49 @@ describe("startTicker", () => {
     expect(bench.frames.every((frame) => frame.money.frac.length === 18)).toBe(true);
     expect(bench.frames.every((frame) => /^\d{18}$/.test(frame.money.frac))).toBe(true);
     expect(bench.frames.every((frame) => frame.money.int === "57")).toBe(true);
+  });
+
+  it("advances every animation frame in roll mode, ignoring the refresh tier", () => {
+    const bench = harness(at(10, 0), 16);
+    startTicker(bench.host, settings, record(bench), { refreshHz: 1, displayMode: "roll" });
+
+    bench.run(180); // 2880ms，1Hz 档位在 jump 模式下这里只会画 3 帧
+
+    expect(bench.frames).toHaveLength(180);
+    expect(bench.pending()).toBe(1);
+    for (let index = 1; index < bench.stamps.length; index += 1) {
+      expect(bench.stamps[index] - bench.stamps[index - 1]).toBe(16);
+    }
+  });
+
+  it("keeps roll smooth and jump stepped at the very same refresh tier", () => {
+    const roll = harness(at(10, 0), 16);
+    startTicker(roll.host, settings, record(roll), { refreshHz: 1, displayMode: "roll" });
+
+    const jump = harness(at(10, 0), 16);
+    startTicker(jump.host, settings, record(jump), { refreshHz: 1, displayMode: "jump" });
+
+    roll.run(750);
+    jump.run(750);
+
+    expect(roll.frames).toHaveLength(750);
+    expect(jump.frames.length).toBeLessThan(20);
+  });
+
+  it("hands the per-digit roll state to every frame", () => {
+    const bench = harness(at(10, 0), 16);
+    startTicker(bench.host, settings, record(bench), { decimals: 18 });
+
+    bench.run(3);
+
+    for (const frame of bench.frames) {
+      expect(frame.columns.frac).toHaveLength(18);
+      expect(frame.columns.int).toHaveLength(2); // 10:00 时是 57 元
+      expect(frame.columns.int.map((column) => column.digit).join("")).toBe("57");
+      expect(frame.columns.frac.map((column) => column.digit).join("")).toBe(frame.money.frac);
+    }
+    // 逐帧 progress 在变：这就是滚条位移的来源
+    expect(bench.frames[2].columns.frac[1].progress).not.toBe(bench.frames[0].columns.frac[1].progress);
   });
 
   it("pads 6-digit frames to six characters", () => {

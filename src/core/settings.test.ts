@@ -4,11 +4,13 @@ import { formatAtoms, type Decimals } from "./format";
 import {
   DECIMALS_OPTIONS,
   DEFAULT_INPUT,
+  DISPLAY_MODE_OPTIONS,
   hourlyAtoms,
   ONE_HOUR_MS,
   REFRESH_HZ_OPTIONS,
   toSettings,
   validateInput,
+  type DisplayMode,
   type RawInput,
   type RefreshHz,
 } from "./settings";
@@ -27,6 +29,7 @@ describe("DEFAULT_INPUT", () => {
       overtimeMode: false,
       decimals: 18,
       refreshHz: 1,
+      displayMode: "roll",
     });
   });
 
@@ -205,6 +208,36 @@ describe("display tiers: decimals + refreshHz", () => {
       expect(result.errors.refreshHz).toBe("跳动频率只能是 60 / 10 / 1");
       expect(result.settings).toBeNull();
     }
+  });
+
+  it("defaults the display mode to roll and offers roll / jump in panel order", () => {
+    expect(DEFAULT_INPUT.displayMode).toBe("roll");
+    expect(DISPLAY_MODE_OPTIONS).toEqual(["roll", "jump"]);
+  });
+
+  it("accepts both display modes and leaves the earning contract untouched", () => {
+    for (const displayMode of DISPLAY_MODE_OPTIONS) {
+      const result = validateInput({ ...DEFAULT_INPUT, displayMode });
+      expect(result.errors).toEqual({});
+      expect(result.settings).toEqual(toSettings(DEFAULT_INPUT));
+    }
+  });
+
+  it("rejects a display mode outside roll / jump", () => {
+    for (const displayMode of ["smooth", "", "ROLL", "rolling"]) {
+      const result = validateInput({ ...DEFAULT_INPUT, displayMode: displayMode as unknown as DisplayMode });
+      expect(result.errors.displayMode).toBe("显示方式只能是 roll / jump");
+      expect(result.settings).toBeNull();
+    }
+  });
+
+  it("reports a broken display mode next to the other broken fields", () => {
+    const broken: RawInput = {
+      ...DEFAULT_INPUT,
+      salary: "0",
+      displayMode: "smooth" as unknown as DisplayMode,
+    };
+    expect(Object.keys(validateInput(broken).errors).sort()).toEqual(["displayMode", "salary"]);
   });
 
   it("reports a broken display tier next to the other broken fields", () => {

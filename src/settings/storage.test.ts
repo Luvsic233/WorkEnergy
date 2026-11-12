@@ -110,3 +110,36 @@ describe("storage of the display tiers", () => {
     expect(normalizeRawInput({ decimals: 6 })).toMatchObject({ decimals: 6 });
   });
 });
+
+describe("storage of the display mode", () => {
+  it("round-trips the display mode through the store", async () => {
+    const store = memoryStore();
+    const adapter = createAdapter(() => store);
+    const saved = { ...DEFAULT_INPUT, displayMode: "jump" as const };
+
+    await adapter.save(saved);
+
+    expect(JSON.parse(store.data.get(STORAGE_KEY) as string)).toMatchObject({ displayMode: "jump" });
+    expect(await adapter.load()).toEqual(saved);
+  });
+
+  it("falls back to roll for a legacy record without the display mode", async () => {
+    const store = memoryStore();
+    store.data.set(STORAGE_KEY, JSON.stringify({ salary: "15000" }));
+
+    expect((await createAdapter(() => store).load())?.displayMode).toBe("roll");
+  });
+
+  it("falls back to roll for a display mode the panel never offers", () => {
+    expect(normalizeRawInput({ displayMode: "smooth" })).toMatchObject({ displayMode: "roll" });
+    expect(normalizeRawInput({ displayMode: "ROLL" })).toMatchObject({ displayMode: "roll" });
+    expect(normalizeRawInput({ displayMode: "" })).toMatchObject({ displayMode: "roll" });
+    expect(normalizeRawInput({ displayMode: true })).toMatchObject({ displayMode: "roll" });
+    expect(parseStored(JSON.stringify({ displayMode: 1 }))).toMatchObject({ displayMode: "roll" });
+  });
+
+  it("keeps an explicitly stored roll or jump", () => {
+    expect(normalizeRawInput({ displayMode: "roll" })).toMatchObject({ displayMode: "roll" });
+    expect(normalizeRawInput({ displayMode: "jump" })).toMatchObject({ displayMode: "jump" });
+  });
+});

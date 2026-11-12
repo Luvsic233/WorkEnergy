@@ -3,6 +3,7 @@ import { formatAtoms } from "../core/format";
 import {
   DECIMALS_OPTIONS,
   DEFAULT_INPUT,
+  DISPLAY_MODE_OPTIONS,
   hourlyAtoms,
   REFRESH_HZ_OPTIONS,
   validateInput,
@@ -42,21 +43,38 @@ function Field({ label, value, error, onChange }: FieldProps) {
   );
 }
 
-interface ChoiceProps<T extends number> {
+interface ChoiceProps<T extends number | string> {
   label: string;
   options: readonly T[];
   value: T;
   error?: string;
+  /** 当前显示方式下这一档不生效时置灰（例如 roll 模式下的跳动频率）。 */
+  disabled?: boolean;
+  hint?: string;
   format(option: T): string;
   onChange(value: T): void;
 }
 
-/** 档位开关：小数位数 18/12/6、跳动频率 60/10/1Hz，只写草稿，点保存才落盘。 */
-function Choice<T extends number>({ label, options, value, error, format, onChange }: ChoiceProps<T>) {
+/** 档位开关：显示方式 roll/jump、小数位数 18/12/6、跳动频率 60/10/1Hz，只写草稿，点保存才落盘。 */
+function Choice<T extends number | string>({
+  label,
+  options,
+  value,
+  error,
+  disabled = false,
+  hint,
+  format,
+  onChange,
+}: ChoiceProps<T>) {
   return (
     <div className="settings-choice">
       <span className="settings-field-label">{label}</span>
-      <div className="settings-segmented" role="group" aria-label={label}>
+      <div
+        className={disabled ? "settings-segmented is-disabled" : "settings-segmented"}
+        role="group"
+        aria-label={label}
+        aria-disabled={disabled}
+      >
         {options.map((option) => {
           const active = option === value;
           return (
@@ -64,6 +82,7 @@ function Choice<T extends number>({ label, options, value, error, format, onChan
               key={option}
               type="button"
               aria-pressed={active}
+              disabled={disabled}
               className={active ? "settings-segment is-active" : "settings-segment"}
               onClick={() => onChange(option)}
             >
@@ -73,6 +92,7 @@ function Choice<T extends number>({ label, options, value, error, format, onChan
         })}
       </div>
       {error ? <span className="settings-error">{error}</span> : null}
+      {hint ? <span className="settings-hint">{hint}</span> : null}
     </div>
   );
 }
@@ -137,6 +157,14 @@ export function SettingsPanel({ open, initial, adapter, onClose, onSaved }: Sett
 
       <div className="settings-display">
         <Choice
+          label="显示方式"
+          options={DISPLAY_MODE_OPTIONS}
+          value={draft.displayMode}
+          error={errors.displayMode}
+          format={(option) => (option === "roll" ? "机械滚动" : "整串跳动")}
+          onChange={(value) => update("displayMode", value)}
+        />
+        <Choice
           label="小数位数"
           options={DECIMALS_OPTIONS}
           value={draft.decimals}
@@ -149,6 +177,8 @@ export function SettingsPanel({ open, initial, adapter, onClose, onSaved }: Sett
           options={REFRESH_HZ_OPTIONS}
           value={draft.refreshHz}
           error={errors.refreshHz}
+          disabled={draft.displayMode === "roll"}
+          hint={draft.displayMode === "roll" ? "机械滚动按每帧渲染，频率档位只在整串跳动时生效" : undefined}
           format={(option) => `${option} Hz`}
           onChange={(value) => update("refreshHz", value)}
         />

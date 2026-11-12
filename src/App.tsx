@@ -47,7 +47,13 @@ export function App() {
 
   return (
     <main className="stage">
-      <FloatingBar settings={settings} decimals={savedInput.decimals} refreshHz={savedInput.refreshHz} now={now} />
+      <FloatingBar
+        settings={settings}
+        decimals={savedInput.decimals}
+        refreshHz={savedInput.refreshHz}
+        displayMode={savedInput.displayMode}
+        now={now}
+      />
       <div className="controls">
         <label>
           <input type="checkbox" checked={overtimeMode} onChange={(event) => setOvertimeMode(event.currentTarget.checked)} />

@@ -10,6 +10,16 @@ export type RefreshHz = 60 | 10 | 1;
 /** 跳动频率可选档位，面板按此顺序渲染。 */
 export const REFRESH_HZ_OPTIONS: readonly RefreshHz[] = [60, 10, 1];
 
+/**
+ * 金额区的显示方式：
+ * - roll：机械计数器，每帧（60fps）推进滚条位移，看着数字慢慢累加；此档 refreshHz 不生效。
+ * - jump：整串数字按 refreshHz 整跳（旧行为）。
+ */
+export type DisplayMode = "roll" | "jump";
+
+/** 显示方式可选档位，面板按此顺序渲染，白名单与之一致。 */
+export const DISPLAY_MODE_OPTIONS: readonly DisplayMode[] = ["roll", "jump"];
+
 /** 用户在设置面板里能看到的全部输入，金额一律是字符串 / 布尔，没有任何 Number 参与金额。 */
 export interface RawInput {
   salary: string;
@@ -23,8 +33,10 @@ export interface RawInput {
   overtimeMode: boolean;
   /** 小数位数：18 位（默认，机芯上限）/ 12 位 / 6 位。 */
   decimals: Decimals;
-  /** DOM 重绘频率档位，默认 1Hz。 */
+  /** DOM 重绘频率档位，默认 1Hz；只在 displayMode 为 jump 时生效。 */
   refreshHz: RefreshHz;
+  /** 金额区显示方式，默认 roll（逐帧滚条）。 */
+  displayMode: DisplayMode;
 }
 
 export const DEFAULT_INPUT: RawInput = {
@@ -39,6 +51,7 @@ export const DEFAULT_INPUT: RawInput = {
   overtimeMode: false,
   decimals: DEFAULT_DECIMALS,
   refreshHz: 1,
+  displayMode: "roll",
 };
 
 /** 校验会报错的字段（开关本身不会报错）。 */
@@ -51,7 +64,8 @@ export type InputField =
   | "lunchStart"
   | "lunchEnd"
   | "decimals"
-  | "refreshHz";
+  | "refreshHz"
+  | "displayMode";
 
 export type FieldErrors = Partial<Record<InputField, string>>;
 
@@ -81,9 +95,9 @@ function clockError(label: string, raw: string): string | null {
   return null;
 }
 
-/** 枚举型字段（小数位数 / 跳动频率）只接受面板给出的档位。 */
-function choiceError<T extends number>(label: string, allowed: readonly T[], value: number): string | null {
-  return (allowed as readonly number[]).includes(value) ? null : `${label}只能是 ${allowed.join(" / ")}`;
+/** 枚举型字段（小数位数 / 跳动频率 / 显示方式）只接受面板给出的档位。 */
+function choiceError<T extends number | string>(label: string, allowed: readonly T[], value: T): string | null {
+  return (allowed as readonly (number | string)[]).includes(value) ? null : `${label}只能是 ${allowed.join(" / ")}`;
 }
 
 /**
@@ -120,6 +134,9 @@ export function validateInput(input: RawInput): ValidationResult {
 
   const refreshHz = choiceError("跳动频率", REFRESH_HZ_OPTIONS, input.refreshHz);
   if (refreshHz) errors.refreshHz = refreshHz;
+
+  const displayMode = choiceError("显示方式", DISPLAY_MODE_OPTIONS, input.displayMode);
+  if (displayMode) errors.displayMode = displayMode;
 
   const startError = clockError("上班时间", input.workStart);
   if (startError) errors.workStart = startError;

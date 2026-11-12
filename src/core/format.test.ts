@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ATOMS_PER_YUAN, parseMicro } from "./earning";
-import { formatAtoms, formatMicro } from "./format";
+import { digitColumns, formatAtoms, formatMicro } from "./format";
 
 describe("formatMicro", () => {
   it("keeps significant fraction digits: 21750000 => 21.75", () => {
@@ -81,5 +81,105 @@ describe("formatAtoms decimals", () => {
       int: "10,000",
       frac: "250000000000000000",
     });
+  });
+});
+
+describe("digitColumns: 每一位的 {digit, progress}", () => {
+  // 10000 元 / 21.75 天 / 8 小时 → 每秒入账 0.015964 元 = 15_964_000_000_000 atoms。
+  const perSecond = 15_964_000_000_000_000n;
+
+  it("splits zero into one integer digit and a full width of zero fraction digits", () => {
+    const { int, frac } = digitColumns(0n, 18);
+    expect(int).toEqual([{ digit: 0, progress: 0 }]);
+    expect(frac).toHaveLength(18);
+    expect(frac.every((column) => column.digit === 0)).toBe(true);
+  });
+
+  it("renders the native ceiling 10^18 - 1 as all nines about to carry", () => {
+    const { int, frac } = digitColumns(ATOMS_PER_YUAN - 1n, 18);
+    expect(int).toEqual([{ digit: 0, progress: 0.999999 }]);
+    expect(frac.map((column) => column.digit)).toEqual(Array(18).fill(9));
+    // 每一位都正好停在自己那一格的尽头：unit = 10^(18-d)，余数 = unit - 1
+    for (let d = 1; d <= 17; d += 1) {
+      const unit = 10n ** BigInt(18 - d);
+      expect(frac[d - 1].progress).toBe(Number(((unit - 1n) * 1_000_000n) / unit) / 1_000_000);
+    }
+    // 第 18 位的 unit 就是 1 atom，内部没有可滚的余量，progress 恒为 0
+    expect(frac[17]).toEqual({ digit: 9, progress: 0 });
+  });
+
+  it("derives digit and progress from BigInt, never from a float", () => {
+    // 57.471264367816091954 元
+    const atoms = 57_471_264_367_816_091_954n;
+    const { int, frac } = digitColumns(atoms, 18);
+
+    // 整数第 k 位：unit = 10^(18+k)，十位是 5 且已走向 6 的 74%，个位是 7 且已走向 8 的 47%
+    expect(int).toEqual([
+      { digit: 5, progress: 0.747126 },
+      { digit: 7, progress: 0.471264 },
+    ]);
+    // 小数第 1 位 = 4，已走向 5 的 71%
+    expect(frac[0]).toEqual({ digit: 4, progress: 0.712643 });
+
+    // 每一位的 digit 与 formatAtoms 的字符串严格一致（前导零在此已被裁掉）
+    expect(int.map((column) => column.digit).join("")).toBe("57");
+    expect(frac.map((column) => column.digit).join("")).toBe("471264367816091954");
+  });
+
+  it("keeps progress inside [0, 1) for every digit of many amounts", () => {
+    const samples = [0n, 1n, 9n, perSecond, ATOMS_PER_YUAN - 1n, ATOMS_PER_YUAN, 9_999_999n * ATOMS_PER_YUAN + 1n];
+    for (const atoms of samples) {
+      const { int, frac } = digitColumns(atoms, 18);
+      for (const column of [...int, ...frac]) {
+        expect(column.progress).toBeGreaterThanOrEqual(0);
+        expect(column.progress).toBeLessThan(1);
+        expect(Number.isInteger(column.digit)).toBe(true);
+        expect(column.digit).toBeGreaterThanOrEqual(0);
+        expect(column.digit).toBeLessThanOrEqual(9);
+      }
+    }
+  });
+
+  it("crawls on the high digits while the low digits blur past", () => {
+    const before = digitColumns(0n, 18);
+    const after = digitColumns(perSecond, 18);
+
+    // 第 1 位小数（0.1 元一格）一秒只爬 16% 格：这是"看得出在慢慢累加"的那一位
+    expect(after.frac[0].progress).toBeCloseTo(0.15964, 5);
+    expect(after.frac[0].digit).toBe(before.frac[0].digit);
+
+    // 第 3 位小数（1e-3 元一格）一秒跨过 15 格：只可能是流动的尾巴
+    expect(after.frac[2].digit).not.toBe(before.frac[2].digit);
+  });
+
+  it("rolls the ones digit with the fraction of the current yuan", () => {
+    const { int } = digitColumns(57n * ATOMS_PER_YUAN + ATOMS_PER_YUAN / 2n, 18);
+    // int 数组从最高位排到个位：57.5 元 → 十位 5（已走向 6 的 75%）、个位 7（已走向 8 的 50%）
+    expect(int).toEqual([
+      { digit: 5, progress: 0.75 },
+      { digit: 7, progress: 0.5 },
+    ]);
+  });
+
+  it("grows the integer digits with the amount and drops the leading zeros", () => {
+    expect(digitColumns(5n * ATOMS_PER_YUAN, 18).int).toEqual([{ digit: 5, progress: 0 }]);
+    expect(digitColumns(10n * ATOMS_PER_YUAN, 18).int).toEqual([
+      { digit: 1, progress: 0 },
+      { digit: 0, progress: 0 },
+    ]);
+
+    // 9999999 元 + 0.5 元：7 位整数，最高位已贴住进位
+    const seven = 9_999_999n * ATOMS_PER_YUAN + ATOMS_PER_YUAN / 2n;
+    const { int } = digitColumns(seven, 18);
+    expect(int.map((column) => column.digit)).toEqual([9, 9, 9, 9, 9, 9, 9]);
+    expect(int).toHaveLength(7);
+  });
+
+  it("truncates the fraction to the chosen tier", () => {
+    const atoms = 57_471_264_367_816_091_954n;
+    for (const decimals of [18, 12, 6] as const) {
+      const { frac } = digitColumns(atoms, decimals);
+      expect(frac.map((column) => column.digit).join("")).toBe(formatAtoms(atoms, decimals).frac);
+    }
   });
 });
