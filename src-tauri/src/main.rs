@@ -31,13 +31,13 @@ async fn show_bar_menu(app: AppHandle) -> Result<(), String> {
 /// 跨过一个 20 元整数倍时弹一次庆祝窗（label=celebrate，200x200，不抢焦点）。
 /// 主卡已隐藏到托盘时什么都不做 —— 位置只能相对主卡算，看不见主卡就不该弹。
 #[tauri::command]
-fn show_celebration(app: AppHandle) {
+async fn show_celebration(app: AppHandle) {
     celebration::show(&app);
 }
 
 /// 庆祝弹窗的露出时长（4 秒）到点由前端调：只隐藏，不销毁，下次复用同一个 webview。
 #[tauri::command]
-fn hide_celebration(app: AppHandle) {
+async fn hide_celebration(app: AppHandle) {
     celebration::hide(&app);
 }
 

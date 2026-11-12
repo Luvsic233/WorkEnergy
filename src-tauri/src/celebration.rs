@@ -239,6 +239,20 @@ pub fn run_startup_hook(app: &AppHandle) {
                 ));
                 show(&handle);
             }
+            // 走真实前端路径：让主窗口里的 JS 调 invoke("show_celebration")。
+            // 与上面几条"直接调 show()"不同，这条会经过 Tauri 的命令派发 —— 正是用户实际触发的路径。
+            "invoke-celebrate" => {
+                match handle.get_webview_window(desktop::MAIN_WINDOW) {
+                    Some(main) => {
+                        let script = "window.__TAURI__.core.invoke('show_celebration')";
+                        match main.eval(script) {
+                            Ok(()) => desktop::trace("self-test: eval -> invoke(show_celebration) sent"),
+                            Err(error) => desktop::trace(&format!("self-test: eval failed: {error}")),
+                        }
+                    }
+                    None => desktop::trace("self-test: main window missing"),
+                }
+              }
             "celebrate-hidden" => {
                 desktop::hide_main_window(&handle);
                 std::thread::sleep(Duration::from_millis(500));

@@ -29,6 +29,12 @@ export const CARD_WIDTH_SLACK = 10;
 /** 与已生效宽度差小于这个值就不折腾窗口（避免 1-2px 抖动）。 */
 export const RESIZE_THRESHOLD_PX = 6;
 
+/** 限流窗口：这段时间内最多发起 RESIZE_BUDGET 次窗口尺寸变更。 */
+export const RESIZE_WINDOW_MS = 5000;
+
+/** 限流预算：即使出现意料之外的反馈回路，也不会把主线程淹掉。 */
+export const RESIZE_BUDGET = 6;
+
 /** 整数部分的位数（忽略千分位分隔符等非数字字符），至少 1 位。 */
 export function digitCountOf(intText: string): number {
   const digits = intText.replace(/\D/g, "");
@@ -132,6 +138,7 @@ export function useAdaptiveCardWidth(enabled: boolean, refs: AdaptiveRefs) {
   const tracker = useRef(createSettleTracker());
   const appliedWidth = useRef(0);
   const pending = useRef(false);
+  const recentResizes = useRef<number[]>([]);
 
   const measureAndApply = useCallback(() => {
     pending.current = false;
@@ -141,6 +148,15 @@ export function useAdaptiveCardWidth(enabled: boolean, refs: AdaptiveRefs) {
     const photo = bar.querySelector<HTMLElement>(".bar-photo-art");
     const desired = clampCardWidth(measureNeededWidth(bar, main, photo));
     if (Math.abs(desired - appliedWidth.current) < RESIZE_THRESHOLD_PX) return;
+    // 限流：窗口尺寸变更是最贵的操作（跨进程 IPC + 重排），绝不能允许它成风暴。
+    const nowMs = Date.now();
+    const recent = recentResizes.current.filter((at) => nowMs - at < RESIZE_WINDOW_MS);
+    if (recent.length >= RESIZE_BUDGET) {
+      console.warn("[adaptive-width] 触发限流，跳过本次窗口尺寸变更", { desired });
+      return;
+    }
+    recent.push(nowMs);
+    recentResizes.current = recent;
     appliedWidth.current = desired;
     applyFixedWindowSize(desired, PHOTO_CARD_HEIGHT);
   }, [refs.bar, refs.main]);

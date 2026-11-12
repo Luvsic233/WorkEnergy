@@ -450,7 +450,7 @@ body {
   align-items: center;
   justify-content: flex-start;
   width: 96px;
-  max-width: 34%;
+  /* 96px 固定：宽度测量不能依赖窗口宽度，否则会互相追着跑 */
   margin-right: -6px;
   background: var(--theme-bar-bg, #f7f0e3);
   /* 右缘淡出：图片与卡片底色之间没有硬边。 */

@@ -7,20 +7,34 @@ pub const MAIN_WINDOW: &str = "main";
 /// Label of the on-demand settings window (430x540, real title bar).
 pub const SETTINGS_WINDOW: &str = "settings";
 
-/// Diagnostics are opt-in: set this env var to a file path and every desktop
-/// event (tray creation, menu toggles, single-instance handoff, saved window
-/// position) is appended there. Nothing is written otherwise.
+/// Diagnostics are written to a file by default so a field bug leaves evidence:
+/// %LOCALAPPDATA%/com.workenergy.shell/desktop.log . WE_DESKTOP_LOG still overrides
+/// the path. The file is dropped once it grows past the cap, so it cannot eat a disk.
 const LOG_ENV: &str = "WE_DESKTOP_LOG";
+const LOG_MAX_BYTES: u64 = 256 * 1024;
+
+fn default_log_path() -> Option<std::path::PathBuf> {
+    let base = std::env::var_os("LOCALAPPDATA")?;
+    let mut path = std::path::PathBuf::from(base);
+    path.push("com.workenergy.shell");
+    let _ = std::fs::create_dir_all(&path);
+    path.push("desktop.log");
+    Some(path)
+}
 
 pub fn trace(message: &str) {
-    let Ok(path) = std::env::var(LOG_ENV) else {
+    let target = std::env::var_os(LOG_ENV)
+        .map(std::path::PathBuf::from)
+        .or_else(default_log_path);
+    let Some(path) = target else {
         return;
     };
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-    {
+    if let Ok(meta) = std::fs::metadata(&path) {
+        if meta.len() > LOG_MAX_BYTES {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
         let _ = writeln!(file, "{message}");
     }
 }
