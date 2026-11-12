@@ -76,14 +76,12 @@ export function createMemoryThemeIo(tree: Record<string, string> = {}): MemoryTh
 /*
  * Tauri 真机实现。
  *
- * 说明（重要，写在这里以免下次又踩）：本波允许改动的 src-tauri 部分只有 capabilities/default.json
- * 与 tauri.conf.json 的 app.security，Rust 侧（Cargo.toml / src-tauri/src）不许动，所以
- * tauri-plugin-fs 现在并不在壳里。下面这套命令形状是 Tauri v2 的 fs 插件 IPC，
- * 只有等外壳注册了 tauri-plugin-fs 并在 capability 里放了 fs: 权限之后才会真正生效；
- * 在此之前每次调用都会失败，被 catch 住并只留一行日志，应用照常只显示内置主题。
+ * 命令形状按 tauri-plugin-fs v2.7.1 的 commands.rs 实测核对（读是 ipc::Response → 字节，
+ * 写是原始请求 + headers）；壳里已注册 tauri-plugin-fs，capability 把 scope 收窄到
+ * $APPDATA/themes。任何一步失败都被 catch 住、只留一行日志，应用照常只显示内置主题。
  */
 interface InvokeFn {
-  (command: string, args?: Record<string, unknown>): Promise<unknown>;
+  (command: string, args?: unknown, options?: { headers?: Record<string, string> }): Promise<unknown>;
 }
 
 interface TauriGlobal {
@@ -142,11 +140,19 @@ export const tauriThemeIo: ThemeIo = {
     const invoke = runtime()?.core?.invoke;
     if (!invoke) return null;
     try {
-      const text = await invoke("plugin:fs|read_text_file", {
+      const data = await invoke("plugin:fs|read_text_file", {
         path: joinPath(root, dir, file),
         options: {},
       });
-      return typeof text === "string" ? text : null;
+      // 插件这条命令回的是原始字节（Rust 侧 ipc::Response → ArrayBuffer），不是 JSON 字符串。
+      if (typeof data === "string") return data;
+      const bytes =
+        data instanceof ArrayBuffer
+          ? new Uint8Array(data)
+          : Array.isArray(data)
+            ? Uint8Array.from(data as number[])
+            : null;
+      return bytes === null ? null : new TextDecoder().decode(bytes);
     } catch {
       return null;
     }
@@ -158,9 +164,13 @@ export const tauriThemeIo: ThemeIo = {
     const dirPath = joinPath(root, dir);
     try {
       await invoke("plugin:fs|mkdir", { path: dirPath, options: { recursive: true } });
-      await invoke("plugin:fs|write_text_file", {
-        path: joinPath(dirPath, file),
-        data: Array.from(new TextEncoder().encode(content)),
+      // write_text_file 走"原始请求"：路径与选项在 headers 里，body 才是文件字节。
+      // 写成 { path, data } 的 JSON 会报 "missing file path"（Rust 侧从 header 取路径）。
+      await invoke("plugin:fs|write_text_file", new TextEncoder().encode(content), {
+        headers: {
+          path: encodeURIComponent(joinPath(dirPath, file)),
+          options: JSON.stringify({ create: true }),
+        },
       });
       return true;
     } catch {
@@ -178,7 +188,8 @@ export function createThemeIo(): ThemeIo {
 /**
  * 「打开主题文件夹」：调用外壳的 opener 命令把资源管理器打开在主题根目录。
  * 浏览器里没有任何动作（按钮点了不报错，这是约定好的降级）。
- * 注意：tauri-plugin-opener 同样属于 Rust 侧的依赖，本波不许加；命令不存在时这里静默失败。
+ * 壳里已注册 tauri-plugin-opener（capability: opener:allow-open-path + $APPDATA/themes scope）；
+ * 命令不存在时这里静默失败。
  */
 export async function openThemeFolder(root: string | null): Promise<void> {
   if (!root) return;

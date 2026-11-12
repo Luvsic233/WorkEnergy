@@ -35,6 +35,12 @@ fn main() {
             desktop::trace("single-instance: second launch detected");
             desktop::show_main_window(app);
         }))
+        // 用户主题目录（%APPDATA%\com.workenergy.shell\themes）的读写走 fs 插件：
+        // 前端调的是 plugin:fs|read_dir / read_text_file / write_text_file / mkdir，
+        // 没有这个插件就是空转。scope 由 capabilities/default.json 收窄到 themes/**。
+        .plugin(tauri_plugin_fs::init())
+        // 「打开主题文件夹」按钮走 plugin:opener|open_path。
+        .plugin(tauri_plugin_opener::init())
         // Only the window position is remembered; the shell keeps a fixed size.
         .plugin(
             tauri_plugin_window_state::Builder::default()
