@@ -9,30 +9,47 @@ import {
 } from "./photoLeft";
 
 describe("photo-left：状态 → 候选文件名", () => {
-  it("lists the state file first (png before webp), then the idle files", () => {
+  it("lists the state file first (png before webp before gif), then the idle files", () => {
     expect(photoCandidateFiles("overtime")).toEqual([
       "kitty-overtime.png",
       "kitty-overtime.webp",
+      "kitty-overtime.gif",
       "kitty-idle.png",
       "kitty-idle.webp",
+      "kitty-idle.gif",
     ]);
     expect(photoCandidateFiles("offwork")).toEqual([
       "kitty-offwork.png",
       "kitty-offwork.webp",
+      "kitty-offwork.gif",
       "kitty-idle.png",
       "kitty-idle.webp",
+      "kitty-idle.gif",
     ]);
     // milestone 沿用吉祥物映射：kitty-happy
     expect(photoCandidateFiles("milestone")).toEqual([
       "kitty-happy.png",
       "kitty-happy.webp",
+      "kitty-happy.gif",
       "kitty-idle.png",
       "kitty-idle.webp",
+      "kitty-idle.gif",
     ]);
   });
 
   it("has no idle duplicate when the state already is idle", () => {
-    expect(photoCandidateFiles("idle")).toEqual(["kitty-idle.png", "kitty-idle.webp"]);
+    expect(photoCandidateFiles("idle")).toEqual([
+      "kitty-idle.png",
+      "kitty-idle.webp",
+      "kitty-idle.gif",
+    ]);
+  });
+
+  it("matches a user-supplied .gif to the right state", () => {
+    const files = ["kitty-idle.png", "kitty-overtime.gif", "kitty-offwork.webp"];
+    expect(pickPhotoFile(files, "overtime")).toBe("kitty-overtime.gif");
+    expect(pickPhotoFile(files, "offwork")).toBe("kitty-offwork.webp");
+    expect(pickPhotoFile(files, "idle")).toBe("kitty-idle.png");
   });
 
   it("points at the folder the user actually drops images in", () => {

@@ -13,7 +13,7 @@ import { joinPath, themesRoot } from "./paths";
 export const PHOTO_THEME_DIR = "maodie";
 
 /** 扩展名优先级：先 .png 再 .webp。 */
-export const PHOTO_EXTENSIONS: readonly string[] = [".png", ".webp"];
+export const PHOTO_EXTENSIONS: readonly string[] = [".png", ".webp", ".gif"];
 
 /** 四个吉祥物状态对应的文件名主干（沿用 mascot 映射：milestone = kitty-happy）。 */
 export const PHOTO_STATE_BASENAMES: Readonly<Record<MascotState, string>> = {

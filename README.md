@@ -1,193 +1,64 @@
 # WorkEnergy · 上班实时工资
 
-常驻桌面的小挂件：实时显示"今天上班已经赚到多少钱"，金额精确到 12 位小数并逐帧跳动，全程 BigInt 定点运算、requestAnimationFrame 只写文本节点。
-
-![截图](docs/screenshot.png)
-
-> 截图占位：`docs/screenshot.png` 尚未入库。补图时把 PNG 放到 `docs/` 下，本行路径不用改。
+常驻桌面的小挂件：实时显示今天上班已经赚到多少钱。小数逐帧滚动，还配了一只会在下班、加班时变脸的猫。
 
 ## 功能
 
-- **12 位小数实时跳动**：金额最小单位是 1 atom = 10⁻¹⁸ 元，界面取前 12 位；每帧只更新 DOM 文本节点，不触发 React 重渲染。
-- **月薪自动 ÷21.75 ÷8**：默认按每月 21.75 个计薪日、每天 8 小时折算时薪，两个系数都能在设置面板里改。
-- **午休扣除**：可开关的午休窗口，落在窗口内的时长不计薪。
-- **下班冻结**：到点后金额停在当天总额，不再增长，阶段显示"已下班"。
-- **加班模式**：打开后下班之后的时长继续累计，阶段显示"加班"。
-- **设置面板**：月薪 / 计薪天数 / 日工时 / 上下班时间 / 午休起止 / 加班模式；输入即时校验，错误就地显示；配置持久化在 `localStorage` 的 `workenergy.settings.v1`。
-- **托盘图标与开机自启**：待外壳波次补齐，当前版本只有窗口本体（见"已知限制"）。
+- **实时金额**：小数位数 6 / 12 / 18 可选，逐帧滚动累加
+- **薪资折算**：默认月薪 ÷ 21.75 天 ÷ 8 小时，系数都能改；午休时段可扣除
+- **三种状态**：在岗 / 已下班（金额冻结）/ 加班（下班后继续累计）
+- **耄耋猫主题**：三种状态三张图；金额每满 20 元从卡片上方随机弹一只动图猫，4 秒收起
+- **左键点一下**：卡片像果冻弹一下 + 冒一句吐槽；累计点击有里程碑彩蛋
+- **桌面集成**：托盘、开机自启、窗口位置记忆、默认不置顶（右键可切换）
 
-## 快速开始
+## 下载
 
-要求：Node ≥ 20（本机实测 Node 24.21.0）、pnpm ≥ 9（实测 11.28.5）。
+到 [Releases](https://github.com/Luvsic233/WorkEnergy/releases/latest) 下载 `WorkEnergy_x.y.z_x64-setup.exe`，装完即用，**不需要装任何运行环境**。
+
+- 左键按住拖动位置，右键出菜单（设置 / 总在最前 / 开机自启 / 隐藏）
+- 卸载时勾选 **Delete the application data**，配置和计数会一起清掉
+
+## 换成自己的图（可选）
+
+图片已内置，开箱即用。想换的话，把同名文件放进：
+
+```
+%APPDATA%\com.workenergy.shell\themes\maodie\
+```
+
+| 文件名 | 用在哪 |
+| --- | --- |
+| `kitty-idle` | 在岗 |
+| `kitty-offwork` | 已下班 |
+| `kitty-overtime` | 加班 |
+| `celebrate-1` / `celebrate-2` | 满 20 元的庆祝动图（随机播一张） |
+
+扩展名支持 png / webp / gif。**这个目录里的图优先于内置图**，删掉即恢复默认。
+
+## 开发
+
+需要 Node ≥ 20。
 
 ```bash
 pnpm install --store-dir .pnpm-store
-
-# 开发预览，默认 http://localhost:5173（等价写法：node node_modules/vite/bin/vite.js）
-pnpm dev
-
-# 不经过 pnpm script 直接起 vite
-node node_modules/vite/bin/vite.js
-
-pnpm test        # vitest run：5 个测试文件 / 51 个用例
-pnpm typecheck   # tsc --noEmit，应用与 node 两套 tsconfig
-pnpm build       # tsc --noEmit && vite build → dist/
+pnpm dev          # http://localhost:5173
+pnpm test         # vitest，288 个用例
+pnpm typecheck
+pnpm tauri:build  # 打 exe + NSIS 安装包
 ```
 
-`--store-dir .pnpm-store` 建议一直带着：这台机器的项目目录不允许建目录符号链接，把 pnpm 的内容寻址存储放进项目内，安装才能走硬链接而不是复制。该目录已在 `.gitignore` 中。
+## 实现要点
 
-### 命令验证状态（如实标注）
-
-| 命令 | 作用 | 本轮是否实跑 |
-| --- | --- | --- |
-| `pnpm install --frozen-lockfile --store-dir .pnpm-store` | 装依赖 | ✅ 跑过：`Already up to date`，退出码 0 |
-| `pnpm dev` | dev server | ✅ 跑过：`VITE v8.3.7 ready in 277 ms`，`http://localhost:5173/` |
-| `node node_modules/vite/bin/vite.js` | dev server（同上的直连写法） | ✅ 跑过，端口 5173 就绪 |
-| `pnpm test` | 单测 | ✅ 跑过：5 files / 51 tests passed |
-| `node node_modules/vitest/vitest.mjs run` | 单测（直连写法） | ✅ 跑过，结果同上 |
-| `pnpm typecheck` | 类型检查 | ✅ 跑过：两套 tsconfig 均无输出、退出码 0 |
-| `pnpm build` | 前端产物 | ✅ 跑过：`built in 137ms`，dist 下 index.html + js + css |
-| `node node_modules/vite/bin/vite.js build` | 前端产物（直连写法） | ✅ 跑过，结果同上 |
-| `pnpm exec tauri build` | 打 exe + NSIS 安装包 | ❌ **未在本机跑**：本机只有 gnu 工具链，且 `src-tauri/` 由外壳波次负责 |
-| `.github/workflows/release.yml` 里的任何步骤 | CI 发布 | ❌ **未在 CI 上跑过**：本轮只做了本地 YAML 语法解析 |
-
-## 桌面外壳：Tauri 2 与本机 gnu 工具链
-
-前端可以独立跑（`vite`），外壳是 Tauri 2（`src-tauri/`，`tauri` 2.12.5），窗口无边框、透明、置顶、不入任务栏，bundle 目标为 NSIS。
-
-### 为什么本机不用 MSVC
-
-Windows 上 Rust 默认目标是 `x86_64-pc-windows-msvc`，它需要 **Visual Studio 生成工具 + Windows SDK** 装进系统目录，安装程序要求管理员权限。本机账户不在管理员组，MSVC 路线在安装器那一步就断了，所以本机走 **GNU 路线**：Rust 的 `x86_64-pc-windows-gnu` 目标 + 一套便携 MSYS2 里的 MinGW-w64 gcc 当链接器。整套工具链活在项目目录内（`.toolchain/`）、已被 `.gitignore` 排除、删掉不留痕。
-
-**CI 不需要这套东西**：GitHub Actions 的 `windows-latest` 自带 MSVC，那边直接用官方 rustup，见"CI 与发布"。
-
-### 本机自举步骤
-
-落地后的目录形状：
-
-```
-.toolchain/
-  rust/          # standalone 发行版解包：bin/rustc.exe、bin/cargo.exe、lib/、share/
-  msys64/        # 便携 MSYS2：mingw64/bin 下有 gcc.exe / ld.exe / ar.exe
-  cargo-home/  rustup-home/  rust-dist/  home/  tmp/  logs/  dl/
-```
-
-1. **取 standalone Rust（不要用 rustup 安装器）**：下载
-   `https://static.rust-lang.org/dist/rust-1.89.0-x86_64-pc-windows-gnu.tar.xz`，
-   解包后把其中的 `rust/` 目录放到 `.toolchain/rust/`。standalone 包不会去找 Visual Studio。
-2. **取便携 MSYS2**：从 `https://github.com/msys2/msys2-installer/releases` 下载 `msys2-base-x86_64-*.tar.xz`，
-   解包成 `.toolchain/msys64/`。不要在系统里安装 MSYS2，保持整套工具链可整体删除。
-3. **只用 pacman 装编译器**（装进 mingw64 子环境，不装到系统路径）：
-   ```bash
-   .toolchain/msys64/usr/bin/bash.exe -lc "pacman -Syu --noconfirm"
-   .toolchain/msys64/usr/bin/bash.exe -lc "pacman -S --noconfirm mingw-w64-x86_64-gcc"
-   ```
-4. **构建时把两套工具显式塞进 PATH**，并把 cargo/rustup 的家目录也圈在项目内：
-   ```bash
-   export CARGO_HOME="$PWD/.toolchain/cargo-home"
-   export RUSTUP_HOME="$PWD/.toolchain/rustup-home"
-   export PATH="$PWD/.toolchain/rust/bin:$PWD/.toolchain/msys64/mingw64/bin:$PATH"
-   cd src-tauri && cargo build --release          # 或回到根目录 pnpm exec tauri build
-   ```
-   `mingw64/bin` 必须排在系统目录之前，否则会捡到系统里别的 `gcc`/`ld`。
-5. **自检**（以下输出为本轮实测）：
-
-   ```text
-   $ .toolchain/rust/bin/rustc.exe -vV | grep host
-   host: x86_64-pc-windows-gnu
-
-   $ .toolchain/rust/bin/rustc.exe --version
-   rustc 1.89.0 (29483883e 2025-08-04)
-
-   $ .toolchain/msys64/mingw64/bin/gcc.exe --version
-   gcc.exe (Rev4, Built by MSYS2 project) 16.2.0
-   ```
-
-诚实边界：第 1–3 步是这套工具链当初落地时的做法，本轮只复核了产物版本号，没有重跑下载和 pacman；第 4 步的 `cargo build`/`tauri build` 本轮没有执行（外壳由另一波次编译）。
-
-## 目录结构与分层
-
-| 路径 | 分层 | 职责 |
-| --- | --- | --- |
-| `src/core/earning.ts` | core（纯函数，零依赖） | 字符串 → BigInt 配置解析、`paidMsOf` 在岗时长、`earnedAtoms` 金额定点、`phaseOf` 阶段判定 |
-| `src/core/format.ts` | core | atoms → 整数部分 + 12 位小数；`formatMicro` 供面板显示；绝不经过 Number |
-| `src/core/settings.ts` | core | 面板输入模型 → 微单位映射与校验 |
-| `src/ui/ticker.ts` | ui | requestAnimationFrame 循环外壳，`now/schedule/cancel` 可注入以便单测 |
-| `src/ui/FloatingBar.tsx` | ui | 400×120 深色半透明悬浮条，每帧只写 textContent |
-| `src/ui/SettingsPanel.tsx` | ui | 设置面板：受控输入 + 就地错误行 |
-| `src/settings/storage.ts` | infra | `StorageAdapter` 接口 + localStorage 实现（key `workenergy.settings.v1`） |
-| `src/App.tsx` | 演示页 | 加班开关、演示时钟、悬浮条与面板的组合 |
-| `src-tauri/` | 外壳 | Tauri 2 窗口与 bundle 配置、Rust 入口 |
-
-分层约定：core 不 import UI、不 import 浏览器 API，也不出现浮点；ui 只调 core 的纯函数；infra 只依赖 `StorageAdapter` 接口。
-
-## 精度：为什么不会漂移
-
-公式（`src/core/earning.ts` 的 `earnedAtoms`，一次性整数除法，无中间浮点）：
-
-```text
-earnedAtoms = salaryMicro × paidMs × 5 × 10^18 / (payDaysMicro × hoursMicro × 18)
-```
-
-- 1 atom = 10⁻¹⁸ 元。`salaryMicro` = 月薪(元) × 10⁶；`payDaysMicro` = 21.75 → `21750000n`；`hoursMicro` = 8 → `8000000n`。
-- 常数 `5/18` 是把"每小时 3 600 000 毫秒"和 10¹⁸ atoms/元 一起约分的结果（10/36 = 5/18），所以整条式子里只有一次整除。
-- **累加的是整数毫秒 `paidMs`，不是每帧金额**：先累加时间、再算钱，于是"3 600 次各 +1 秒"与"一次算 3 600 秒"逐位相等。
-- 反例在单测里：`shows why atoms are derived from integer paidMs` —— 若逐帧累加金额，整数截断会一路累积偏差。
-- 精度向量：月薪 10 000、21.75 天、8 小时 → 每小时 `10000 × 10^18 / 174` atoms，显示为 `57.471264367816` 元。
-- 显示是**截断**到 12 位而非四舍五入（atoms 有 18 位精度，显示丢掉后 6 位）。
-
-## 渲染纪律
-
-rAF 回调里只做三件事：读 `Date.now()`、算一次纯函数、写三个 DOM 文本节点。React 只在挂载与设置变更时渲染，整条 bar 的跳动完全不经过协调层；数字用 `tabular-nums` 防止字宽抖动；`body` 保持 `transparent`，为透明无边框桌面窗留位。
-
-## CI 与发布
-
-`.github/workflows/release.yml`（GitHub Actions，Windows x64）：
-
-- 触发：push 到 `main`、推 `v*` tag、PR 到 `main`、以及手动作业。
-- `build` job（`runs-on: windows-latest`，`strategy.matrix` 单条目）：checkout → `pnpm/action-setup@v4` + `actions/setup-node@v4`（pnpm 缓存）→ `pnpm install --frozen-lockfile` → `pnpm exec vitest run` → `pnpm build` → `dtolnay/rust-toolchain@stable`（**MSVC**，CI 不照搬本机 gnu 路线）→ `Swatinem/rust-cache@v2` → `pnpm add -D @tauri-apps/cli@^2` → `pnpm exec tauri build` → `actions/upload-artifact@v4` 上传 `src-tauri/target/release/*.exe` 与 `src-tauri/target/release/bundle/nsis/*.exe`。
-- `release` job 只在 tag 时运行（`needs: build`）：下载 artifact，用 `softprops/action-gh-release@v2` 建 Release 并挂上 exe 与安装包。
-- 权限：工作流默认 `contents: read`，只有 `release` job 提升到 `contents: write`。
-- **arm64 暂不构建**：矩阵只留 x64 一条。要加 `aarch64-pc-windows-msvc` 时，除了追加矩阵条目，产物路径也要从 `src-tauri/target/release` 改成 `src-tauri/target/<triple>/release`（因为需要显式传 `--target`）。
-- 顺序上的一个坑：`tauri.conf.json` 没有配置 `beforeBuildCommand`，所以 workflow 必须先 `pnpm build` 产出 `dist/`，`tauri build` 只负责打包，不会替你构建前端。
+- 金额用 **BigInt 定点**（1 atom = 10⁻¹⁸ 元）：先累加整数毫秒、再做一次整除算钱，不做浮点累加，所以长时间运行不漂移
+- 每帧只写几个 DOM 文本节点，跳动完全不经过 React 渲染
+- 猫主题的卡片宽度按内容实测后调整窗口大小；点击的果冻形变是体积守恒的 squash & stretch
 
 ## 已知限制
 
-- **v1 不支持跨夜班**：下班时间 ≤ 上班时间直接判定为配置错误（`isMisconfigured`），金额恒为 0，阶段显示"配置错误"。
-- 在岗时长按"当天本地时间"计算；跨天只做下班冻结，不做历史累计（不记昨天赚了多少）。
-- **托盘图标、开机自启、无边框透明窗的完整行为**待外壳波次补齐；当前版本不含这部分能力。
-- **存储仍是 localStorage 适配器**（`workenergy.settings.v1`）。外壳波次会换成 Tauri store / 等价的键值后端，届时只替换 `src/settings/storage.ts` 里 `StorageAdapter` 的实现，`core/settings.ts` 与面板组件不用改。
-- 本机没有 MSVC，本地 `tauri build` 只能走 gnu 路线；正式发布包以 CI 的 MSVC 产物为准，两者 ABI 不完全等价。
-- 金额显示截断而非四舍五入（见"精度"一节）。
+- 不支持跨夜班（下班时间 ≤ 上班时间会判定为配置错误）
+- 只算当天，不记昨天赚了多少
+- 发布用 CI 的 MSVC 产物；本机因无管理员权限只能走 gnu 工具链，仅供本地调试
 
 ## 许可
 
-MIT，见 [LICENSE](LICENSE)。Copyright (c) 2026 WorkEnergy contributors。
-
-## 本机工具链（项目内自举，无需管理员权限）
-
-本机没有 Rust、没有管理员权限、MSVC 无法安装，因此 Rust 工具链与 mingw 链接器全部放在项目内的 `.toolchain/`（已在 `.gitignore` 中忽略）：
-
-| 路径 | 内容 | 体积 |
-| --- | --- | --- |
-| `.toolchain/rust/` | rustc 1.92.0 / cargo 1.92.0，host `x86_64-pc-windows-gnu`，LLVM 21.1.3 | 约 830 MB |
-| `.toolchain/msys64/` | 便携 MSYS2 + `mingw-w64-x86_64-gcc` 16.2.0 + binutils 2.47（`x86_64-w64-mingw32-gcc`、`ld`、`ar`、`windres`） | 约 810 MB |
-| `.toolchain/cargo-home/` | `CARGO_HOME`：registry 与 `config.toml`（链接器 + 清华 sparse 源） | |
-| `.toolchain/rctools/` | `windres.exe` 垫片，见下方说明 | |
-| `.toolchain/{tmp,home,rustup-home,dl,logs}/` | TEMP/HOME/RUSTUP_HOME/下载与日志，保证不写 C: 盘 | |
-
-构建前需要的环境（全部指向项目内，不改系统 PATH、不改注册表）：
-
-```bat
-set "TC=E:\WorkEnergy\.toolchain"
-set "PATH=%TC%\rctools;%TC%\rust\bin;%TC%\msys64\mingw64\bin;%TC%\msys64\usr\bin;%PATH%"
-set "CARGO_HOME=%TC%\cargo-home"
-set "RUSTUP_HOME=%TC%\rustup-home"
-set "HOME=%TC%\home"
-set "TEMP=%TC%\tmp"
-set "TMP=%TC%\tmp"
-```
-
-然后 `cd src-tauri && cargo build`（或 `pnpm build && pnpm tauri:build`）。产物：`src-tauri\target\debug\work-energy.exe`。
-
-**windres 垫片（重要，如实记录）**：在本机这台机器上，`tauri-build` → `tauri-winres` → `embed-resource` 调用 `windres` 时稳定报 `windres: preprocessing failed.`（exit 1），而同一条命令在 shell 里手工执行完全正常（`windres --input resource.rc --output out.a --include-dir OUT --output-format=coff --target pe-x86-64 -c 65001` 成功）。已排除：PATH 顺序、`x86_64-w64-mingw32-windres` 名称探测、`RC`/`RC_<target>` 覆盖、cwd、TEMP、参数集（详见提交说明）。因此 `.toolchain/rctools/windres.exe` 是一个垫片：它把预先生成好的资源归档复制到 `--output` 指定路径并返回 0，让构建脚本通过。副作用是 exe 的图标/版本资源固定为模板内容，改动 `tauri.conf.json` 里的图标后需要重新生成 `.toolchain/rctools/libresource.a`。这是本机绕行方案，CI（MSVC）不需要它。
+MIT，见 [LICENSE](LICENSE)。
