@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useImperativeHandle, useRef, type Ref } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type Ref,
+} from "react";
 import type { Settings } from "../core/earning";
 import {
   DEFAULT_DECIMALS,
@@ -8,8 +16,19 @@ import {
   type DigitColumns,
 } from "../core/format";
 import { DEFAULT_INPUT, type DisplayMode, type RefreshHz } from "../core/settings";
-import { invoke } from "../settings/bridge";
+import { invoke, startDragging } from "../settings/bridge";
 import { CELEBRATION_STEP, crossedMultiple } from "../theme/celebration";
+import {
+  counterLine,
+  dayKey,
+  defaultInteractionStore,
+  isClickGesture,
+  pickPhrase,
+  readInteractionState,
+  registerClick,
+  writeInteractionState,
+  type PointerMoment,
+} from "../theme/interaction";
 import { integerYuanOf } from "../theme/mascot";
 import { MascotImage } from "../theme/MascotImage";
 import { PhotoArt } from "../theme/PhotoArt";
@@ -17,6 +36,7 @@ import { layoutOf } from "../theme/layout";
 import { useAdaptiveCardWidth } from "../theme/adaptiveWidth";
 import type { Theme } from "../theme/types";
 import { useMascot } from "../theme/useMascot";
+import { ClickFeedback } from "./ClickFeedback";
 import { DigitCell, FracCell, type DigitCellHandle, type FracCellHandle } from "./RollingDigit";
 import { startTicker } from "./ticker";
 
@@ -25,6 +45,18 @@ import { startTicker } from "./ticker";
  * 前导零的格子由 DigitCell 收起（display: none），所以池子固定也不会显示多余的空位。
  */
 const INT_SLOTS = 12;
+
+/** 手势时长用单调时钟：Date.now() 会被系统对时回拨，performance.now() 不会。 */
+function gestureClock(): number {
+  return typeof performance === "undefined" ? Date.now() : performance.now();
+}
+
+/** × 这类可点击元素自己处理点击：按在它上面不进入「点击 / 拖动」判定。 */
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  const element = target as { closest?: (selector: string) => unknown } | null;
+  if (typeof element?.closest !== "function") return false;
+  return element.closest("button, input, a, textarea, select") !== null;
+}
 
 export interface RollingIntHandle {
   /** 逐帧把每一位推到它该停的整格；只碰 style，不进 React 状态。 */
@@ -164,6 +196,96 @@ export function FloatingBar({
   const adaptive = useAdaptiveCardWidth(isPhotoLeft, { bar: barRef, main: mainRef });
   const adaptiveNote = adaptive.note;
 
+  const handleContextMenu = (event: { preventDefault(): void }) => {
+    // 关掉 WebView2 默认右键菜单，换成 Rust 侧弹出的原生菜单。
+    event.preventDefault();
+    void invoke("show_bar_menu");
+  };
+
+  /*
+   * 左键点击互动（零新增素材）。
+   *
+   * 手势判定：按下只记坐标；松开时「位移 < 4px 且时长 < 500ms」才算点击，位移一旦越过 4px
+   * 就立刻 startDragging() 把窗口交给 OS 拖动，这一次手势从此不再算点击。
+   * 为什么不用 data-tauri-drag-region：真机实测它会在 mousedown 当场把控制权交给 OS 窗口移动循环，
+   * webview 之后连 pointerup / mouseup / click 都收不到（一次真实点击只到 pointerdown + mousedown），
+   * 于是「按下→松开算点击」根本无从判定 —— 所以拖动改成由这里按阈值主动发起。
+   *
+   * 动画纪律：一次点击只 setState 一次（气泡文案 + 一个自增 token）。token 的奇偶映射成
+   * data-fx="a|b"，CSS 换一个 animation-name 就是重播一遍动画：没有逐帧 setState，
+   * 也没有「到点再 setState 收起气泡」（淡出由 keyframes 的 fill 收尾）。
+   */
+  const [feedback, setFeedback] = useState<{ token: number; text: string } | null>(null);
+  const tokenRef = useRef(0);
+  const pressRef = useRef<PointerMoment | null>(null);
+  const draggingRef = useRef(false);
+
+  const runInteraction = useCallback(() => {
+    // 计数：读 → 加一 → 写回。独立存储键（workenergy.interactions.v1），不污染 settings。
+    const day = dayKey(Date.now());
+    const store = defaultInteractionStore();
+    const { state, milestone } = registerClick(readInteractionState(store), day);
+    writeInteractionState(store, state);
+    tokenRef.current += 1;
+    setFeedback({
+      token: tokenRef.current,
+      // 每 5 次把计数写进气泡，其余次数冒一句吐槽。
+      text: counterLine(state.today) ?? pickPhrase(Math.random()),
+    });
+    // 里程碑：复用现有的庆祝弹窗命令，每个档位只弹一次（已弹过的档位持久化在同一个键里）。
+    if (milestone !== null) void invoke("show_celebration");
+  }, []);
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return; // 只认左键
+    draggingRef.current = false;
+    pressRef.current = null;
+    if (isInteractiveTarget(event.target)) return; // × 自己处理点击
+    pressRef.current = { x: event.clientX, y: event.clientY, t: gestureClock() };
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const down = pressRef.current;
+    if (down === null || draggingRef.current) return;
+    if ((event.buttons & 1) === 0) {
+      pressRef.current = null; // 松开事件丢了：这次手势作废，绝不猜。
+      return;
+    }
+    // 时长传 0：这里只问「位移是否还在 4px 以内」。
+    if (isClickGesture(down, { x: event.clientX, y: event.clientY, t: down.t })) return;
+    draggingRef.current = true;
+    pressRef.current = null;
+    startDragging();
+  };
+
+  const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const down = pressRef.current;
+    pressRef.current = null;
+    if (down === null || draggingRef.current || event.button !== 0) return;
+    if (!isClickGesture(down, { x: event.clientX, y: event.clientY, t: gestureClock() })) return;
+    runInteraction();
+  };
+
+  const handlePointerCancel = () => {
+    pressRef.current = null;
+    draggingRef.current = false;
+  };
+
+  // a / b 交替：同一个 animation-name 无法重复播放，换个名字就是重播（同一次点击只改一次属性）。
+  const fx = feedback === null ? null : feedback.token % 2 === 0 ? "b" : "a";
+  // 气泡：key = token，换 key 即重挂载 -> CSS keyframes 从头播一遍。
+  const bubble = feedback === null ? null : <ClickFeedback key={feedback.token} text={feedback.text} />;
+  // 手势全部挂在最外层（整块卡片 + 透明边距），两种版式共用同一份判定。
+  const barHostProps = {
+    className: "bar-host",
+    "data-fx": fx ?? undefined,
+    onPointerDown: handlePointerDown,
+    onPointerMove: handlePointerMove,
+    onPointerUp: handlePointerUp,
+    onPointerCancel: handlePointerCancel,
+    onContextMenu: handleContextMenu,
+  };
+
   useEffect(() => {
     const host = {
       now: now ?? Date.now,
@@ -223,12 +345,6 @@ export function FloatingBar({
     </span>
   );
 
-  const handleContextMenu = (event: { preventDefault(): void }) => {
-    // 关掉 WebView2 默认右键菜单，换成 Rust 侧弹出的原生菜单。
-    event.preventDefault();
-    void invoke("show_bar_menu");
-  };
-
   const closeButton = (
     <button
       type="button"
@@ -243,49 +359,48 @@ export function FloatingBar({
     </button>
   );
 
+  /*
+   * 外层 .bar-host 是手势与动画的锚点：
+   * - 手势（按下/移动/松开、右键）都挂在这里，两种版式共用同一份判定；
+   * - data-fx=a|b 只负责"重播一遍动画"（换 animation-name），不携带任何样式；
+   * - 气泡是 .bar 的兄弟节点，不在被 transform 的那棵子树里，所以文字永远不会被果冻形变拉变形。
+   * 注意：这里已经不再有 data-tauri-drag-region —— 拖动改由上面按 4px 阈值发起（见注释）。
+   */
   // photo-left（内置 maodie）：左侧一张按条高缩放的图（右缘渐变淡出），右侧只有标签 + 金额 + 阶段。
   if (layoutOf(theme) === "photo-left") {
     return (
-      <div
-        ref={barRef}
-        className="bar"
-        data-layout="photo-left"
-        // deep：整条（含标签与阶段文字）都能按住拖动；button/input 这类可点击元素
-        // 仍然吞掉拖拽，所以 × 点得动，数字区也不会被拖拽吃掉点击。
-        data-tauri-drag-region="deep"
-        onContextMenu={handleContextMenu}
-      >
-        {closeButton}
-        <PhotoArt state={mascot.state} />
-        <div className="bar-photo-main" ref={mainRef}>
-          <div className="bar-label">今日实时工资</div>
-          {valueBlock}
-          <div className="bar-foot">{phaseBlock}</div>
+      <div {...barHostProps} data-layout="photo-left">
+        <div ref={barRef} className="bar" data-layout="photo-left">
+          {closeButton}
+          <PhotoArt state={mascot.state} />
+          <div className="bar-photo-main" ref={mainRef}>
+            <div className="bar-label">今日实时工资</div>
+            {valueBlock}
+            <div className="bar-foot">{phaseBlock}</div>
+          </div>
         </div>
+        {bubble}
       </div>
     );
   }
 
   return (
-    <div
-      className="bar"
-      // deep：整条（含标签与阶段文字）都能按住拖动；button/input 这类可点击元素
-      // 仍然吞掉拖拽，所以 × 点得动，数字区也不会被拖拽吃掉点击。
-      data-tauri-drag-region="deep"
-      onContextMenu={handleContextMenu}
-    >
-      {closeButton}
-      <div className="bar-label">今日实时工资</div>
-      {valueBlock}
-      <div className="bar-foot">
-        {phaseBlock}
-        <div className="bar-foot-meta">
-          <span className="hint">
-            {formatMicro(settings.salaryMicro)} 元 / {formatMicro(settings.payDaysMicro)} 天 / {formatMicro(settings.hoursMicro)} 小时
-          </span>
-          <MascotImage theme={theme} state={mascot.state} />
+    <div {...barHostProps}>
+      <div ref={barRef} className="bar">
+        {closeButton}
+        <div className="bar-label">今日实时工资</div>
+        {valueBlock}
+        <div className="bar-foot">
+          {phaseBlock}
+          <div className="bar-foot-meta">
+            <span className="hint">
+              {formatMicro(settings.salaryMicro)} 元 / {formatMicro(settings.payDaysMicro)} 天 / {formatMicro(settings.hoursMicro)} 小时
+            </span>
+            <MascotImage theme={theme} state={mascot.state} />
+          </div>
         </div>
       </div>
+      {bubble}
     </div>
   );
 }

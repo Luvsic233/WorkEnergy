@@ -34,6 +34,15 @@ describe("FloatingBar：默认主题的扁横条一个字都没变", () => {
   it("has no fixed layout for a null theme either", () => {
     expect(render(null)).not.toContain("data-layout");
   });
+
+  it("wraps the bar in the gesture host without a native drag region", () => {
+    const html = render(classic);
+    expect(html).toContain('class="bar-host"');
+    expect(html).not.toContain("data-tauri-drag-region");
+    // 首帧没有气泡 / 没有动画标记：互动只发生在点击之后
+    expect(html).not.toContain("bar-bubble");
+    expect(html).not.toContain("data-fx");
+  });
 });
 
 describe("FloatingBar：photo-left 版式（内置耄耋猫）", () => {
@@ -81,9 +90,26 @@ describe("FloatingBar：photo-left 版式（内置耄耋猫）", () => {
     expect(html).toContain('draggable="false"');
   });
 
-  it("keeps the drag region and the hide-to-tray button", () => {
+  it("keeps the hide-to-tray button", () => {
+    expect(render(maodie, 18)).toContain('class="bar-close"');
+  });
+
+  /*
+   * 有意去掉 data-tauri-drag-region：真机实测它在 mousedown 当场就把控制权交给 OS 的窗口移动循环，
+   * webview 之后连 pointerup / mouseup / click 都收不到（一次真实点击只到 pointerdown + mousedown），
+   * 于是"按下→松开算点击"根本无从判定。拖动改成手势里按 4px 阈值主动 startDragging()。
+   */
+  it("no longer uses the native drag region: click vs drag is decided by the gesture handlers", () => {
     const html = render(maodie, 18);
-    expect(html).toContain('data-tauri-drag-region="deep"');
-    expect(html).toContain('class="bar-close"');
+    expect(html).not.toContain("data-tauri-drag-region");
+    // 手势锚点（整块卡片 + 透明边距）在，卡片本体原样在里面
+    expect(html).toContain('class="bar-host"');
+    expect(html).toContain('data-layout="photo-left"');
+  });
+
+  it("renders no bubble and no fx marker before the first click", () => {
+    const html = render(maodie, 18);
+    expect(html).not.toContain("bar-bubble");
+    expect(html).not.toContain("data-fx");
   });
 });

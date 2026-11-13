@@ -91,10 +91,14 @@ export function createSettleTracker(frames: number = SETTLE_FRAMES) {
  * 相加结果会明显高估（实测把 340 高估成 372）。所以这里克隆一份右栏到屏幕外，
  * 用 width: max-content 让它按内在宽度撑开，量完立刻移除——只在整数位数变化时发生，
  * 频率极低（按默认薪资约 200 秒一次）。
+ *
+ * 一律用布局度量（offsetWidth / offsetLeft），不用 getBoundingClientRect：后者返回的是"变换之后"
+ * 的视觉盒，点一下卡片时那 640ms 的果冻形变（transform: scale）会让测出来的宽度整体缩小，
+ * 一旦撞上这次测量，窗口就会被算小并一直停在那里。offset* 与 transform 无关，从根上躲开这个反馈回路。
  */
 export function measureContentWidth(main: HTMLElement): number {
   const host = main.parentElement;
-  if (!host) return main.scrollWidth;
+  if (!host) return main.offsetWidth;
   const clone = main.cloneNode(true) as HTMLElement;
   clone.style.position = "absolute";
   clone.style.left = "-10000px";
@@ -103,7 +107,7 @@ export function measureContentWidth(main: HTMLElement): number {
   clone.style.visibility = "hidden";
   clone.style.pointerEvents = "none";
   host.appendChild(clone);
-  const width = clone.getBoundingClientRect().width;
+  const width = clone.offsetWidth;
   clone.remove();
   return width;
 }
@@ -116,10 +120,9 @@ export function measureNeededWidth(
 ): number {
   const barStyle = getComputedStyle(bar);
   const barPad = (parseFloat(barStyle.paddingLeft) || 0) + (parseFloat(barStyle.paddingRight) || 0);
-  const photoRect = photo ? photo.getBoundingClientRect() : null;
-  const photoWidth = photoRect ? photoRect.width : 0;
-  const mainRect = main.getBoundingClientRect();
-  const gap = photoRect ? Math.max(0, mainRect.left - photoRect.right) : 0;
+  // 左图与右栏的 offsetParent 都是 .bar（position: relative），所以 offsetLeft 可以直接相减。
+  const photoWidth = photo ? photo.offsetWidth : 0;
+  const gap = photo ? Math.max(0, main.offsetLeft - (photo.offsetLeft + photoWidth)) : 0;
   const contentWidth = measureContentWidth(main);
   return Math.ceil(photoWidth + gap + contentWidth + barPad + CARD_WIDTH_SLACK);
 }

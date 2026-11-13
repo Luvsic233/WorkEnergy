@@ -17,6 +17,8 @@ interface AppWindow {
   /** 窗口标签：原始命令兜底时要用它指明改哪个窗口。 */
   label?: string;
   setSize?: (size: unknown) => Promise<unknown>;
+  /** v2：按住卡片拖动当前窗口（点击判定通过后由前端主动发起）。 */
+  startDragging?: () => Promise<unknown>;
 }
 
 interface WindowApi {
@@ -60,6 +62,31 @@ export async function invoke(command: string): Promise<void> {
   } catch {
     // 原生侧不可用（预览 / 命令被拒）时不需要打扰用户。
   }
+}
+
+/**
+ * 开始拖动当前窗口。
+ *
+ * 为什么不用 data-tauri-drag-region：Tauri 的拖拽区在 mousedown 当场就把控制权交给 OS 的
+ * 窗口移动循环，webview 之后收不到 pointerup / mouseup / click（真机实测：一次真实点击只到
+ * pointerdown + mousedown，松开事件一个都没有）。那样"按下→松开算点击"根本无从判定。
+ * 改成：按下先只记录坐标，位移超过 4px 才调这里开始拖动 —— 点击与拖动于是能在同一块区域上区分。
+ */
+export function startDragging(): void {
+  const api = runtime()?.window;
+  const current = api?.getCurrentWindow?.() ?? api?.appWindow;
+  if (typeof current?.startDragging === "function") {
+    try {
+      void Promise.resolve(current.startDragging()).catch(() => undefined);
+    } catch {
+      // 某些外壳里同步抛错：不打扰用户，松手后照常判定点击。
+    }
+    return;
+  }
+  // 兜底：直接发 plugin:window|start_dragging（与拖拽区脚本走同一条命令）。
+  const invokeFn = runtime()?.core?.invoke;
+  if (!invokeFn || !current?.label) return;
+  void invokeFn("plugin:window|start_dragging", { label: current.label }).catch(() => undefined);
 }
 
 /** 广播一个事件给所有窗口（设置窗口保存后通知悬浮条刷新）。 */
