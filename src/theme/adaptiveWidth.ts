@@ -150,7 +150,11 @@ export function useAdaptiveCardWidth(enabled: boolean, refs: AdaptiveRefs) {
     if (!bar || !main) return;
     const photo = bar.querySelector<HTMLElement>(".bar-photo-art");
     const desired = clampCardWidth(measureNeededWidth(bar, main, photo));
-    if (Math.abs(desired - appliedWidth.current) < RESIZE_THRESHOLD_PX) return;
+    // 漂移检测：主题固定尺寸、启动 IPC、用户用托盘改尺寸都可能绕过这里直接改窗口。
+    // window.outerWidth 是当前真实窗口宽度（CSS px），与缓存不一致就强制重设一次。
+    const actualWidth = typeof window !== "undefined" ? window.outerWidth : appliedWidth.current;
+    const drifted = Math.abs(actualWidth - appliedWidth.current) >= RESIZE_THRESHOLD_PX;
+    if (!drifted && Math.abs(desired - appliedWidth.current) < RESIZE_THRESHOLD_PX) return;
     // 限流：窗口尺寸变更是最贵的操作（跨进程 IPC + 重排），绝不能允许它成风暴。
     const nowMs = Date.now();
     const recent = recentResizes.current.filter((at) => nowMs - at < RESIZE_WINDOW_MS);
@@ -188,7 +192,17 @@ export function useAdaptiveCardWidth(enabled: boolean, refs: AdaptiveRefs) {
     recentResizes.current = [];
     tracker.current.reset();
     schedule();
+    // 启动时主题的固定窗口尺寸（340x96）是异步 IPC，可能比首次测量更晚落地，
+    // 把刚量出来的宽度覆盖回去。补两次测量把它盖回来（次数有界，不是轮询）。
+    const settleTimers = [250, 700].map((ms) =>
+      window.setTimeout(() => {
+        // 作废缓存：否则「算出来还是同一个宽度」会被阈值跳过，迟到的 340 就永远盖不回来
+        appliedWidth.current = 0;
+        schedule();
+      }, ms),
+    );
     return () => {
+      settleTimers.forEach((timer) => window.clearTimeout(timer));
       pending.current = false;
     };
   }, [enabled, schedule]);
