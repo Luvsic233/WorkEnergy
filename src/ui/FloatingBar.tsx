@@ -37,6 +37,7 @@ import { useAdaptiveCardWidth } from "../theme/adaptiveWidth";
 import type { Theme } from "../theme/types";
 import { useMascot } from "../theme/useMascot";
 import { ClickFeedback } from "./ClickFeedback";
+import { useEdgePressure } from "./useEdgePressure";
 import { DigitCell, FracCell, type DigitCellHandle, type FracCellHandle } from "./RollingDigit";
 import { startTicker } from "./ticker";
 
@@ -176,6 +177,9 @@ export function FloatingBar({
   const intRef = useRef<HTMLSpanElement>(null);
   const fracRef = useRef<HTMLSpanElement>(null);
   const phaseRef = useRef<HTMLSpanElement>(null);
+  // 拖动贴边的形变通道：位置与松手都由 Rust 观察线程报上来（拖动期间 webview 收不到鼠标事件），
+  // 这里只往 .bar 上写 transform，一次 setState 都没有。
+  const edgePressure = useEdgePressure(barRef);
   // 吉祥物状态机：notify 只写 ref，状态真的变化时才 setState 一次（无吉祥物的主题整条链路空转）。
   const mascot = useMascot(theme);
   const mascotNotify = mascot.notify;
@@ -255,6 +259,8 @@ export function FloatingBar({
     if (isClickGesture(down, { x: event.clientX, y: event.clientY, t: down.t })) return;
     draggingRef.current = true;
     pressRef.current = null;
+    // 先开观察、再把控制权交给 OS：移动循环一开，webview 就收不到 pointerup 了。
+    edgePressure.begin();
     startDragging();
   };
 

@@ -111,6 +111,34 @@ export async function listen(name: string, handler: () => void): Promise<() => v
   }
 }
 
+/** 订阅带 payload 的事件（bar:edge 的位置数据走这条）；不在 Tauri 里时返回 no-op。 */
+export async function listenPayload<T>(
+  name: string,
+  handler: (payload: T) => void,
+): Promise<() => void> {
+  const fn = runtime()?.event?.listen;
+  if (!fn) return () => undefined;
+  try {
+    return await fn(name, (event) => handler(event.payload as T));
+  } catch {
+    return () => undefined;
+  }
+}
+
+/**
+ * 拖动贴边观察：Rust 侧起线程，用 GetAsyncKeyState + 窗口矩形算四条边的贴近度，
+ * emit bar:edge；左键一松 emit bar:edge-end 并自己退出。
+ * 必须在 startDragging() 之前调 —— 拖动一旦交给 OS，webview 就收不到任何鼠标事件了。
+ */
+export function beginEdgeWatch(): void {
+  void invoke("begin_edge_watch");
+}
+
+/** 结束观察（组件卸载 / 收尾）；Rust 侧线程的下一个 tick 会自己退出。 */
+export function endEdgeWatch(): void {
+  void invoke("end_edge_watch");
+}
+
 /** 落 CSS 这一半：档位属性 + 缩放系数。同步执行，所以第一帧画出来就已经是目标档的字号与间距。 */
 function paintSize(preset: SizePreset): SizePresetSpec {
   const spec = sizePresetSpec(preset);
