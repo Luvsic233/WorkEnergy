@@ -378,12 +378,12 @@ describe("bounceAway：松手弹走", () => {
   const FLUSH_BOTTOM = { x: 640, y: WORK.height - CARD.height, ...CARD };
 
   it("uses the documented bounce distance / duration", () => {
-    expect(BOUNCE_DISTANCE).toBe(24);
-    expect(BOUNCE_MS).toBe(220);
+    expect(BOUNCE_DISTANCE).toBe(72);
+    expect(BOUNCE_MS).toBe(700);
     expect(BOUNCE_DISTANCE).toBeGreaterThanOrEqual(8);
-    expect(BOUNCE_DISTANCE).toBeLessThanOrEqual(32);
+    expect(BOUNCE_DISTANCE).toBeLessThanOrEqual(120);
     expect(BOUNCE_MS).toBeGreaterThanOrEqual(180);
-    expect(BOUNCE_MS).toBeLessThanOrEqual(280);
+    expect(BOUNCE_MS).toBeLessThanOrEqual(1200);
   });
 
   it("pushes a left-pressed card inwards by +x and lands BOUNCE_DISTANCE from the left edge", () => {
@@ -455,11 +455,14 @@ describe("bounceAway：松手弹走", () => {
     expect(previous).toBe(BOUNCE);
   });
 
-  it("eases out: fast at the start, settled at the end", () => {
+  it("eases out like ice: most of the distance in the first fraction of time", () => {
     expect(bounceEase(0)).toBe(0);
     expect(bounceEase(1)).toBe(1);
-    expect(bounceEase(0.5)).toBeGreaterThan(0.5);
-    expect(bounceEase(0.5)).toBeCloseTo(0.875, 10);
+    // 冰面滑行的手感用行为断言钉住，而不是钉死某条曲线的具体数值：
+    // 前 10% 时间要走掉 40% 以上，后 10% 时间几乎不动。
+    expect(bounceEase(0.1)).toBeGreaterThan(0.4);
+    expect(bounceEase(0.5)).toBeGreaterThan(0.8);
+    expect(1 - bounceEase(0.9)).toBeLessThan(0.02);
     // 单调 + 收敛：越靠后每帧的位移越小。
     let lastStep = 1;
     for (let step = 1; step <= 14; step += 1) {

@@ -35,9 +35,9 @@ use crate::desktop;
 pub const THRESHOLD_LOGICAL: f64 = 24.0;
 
 /// 松手弹走的距离（逻辑像素，满压缩时）。与前端 BOUNCE_DISTANCE 一致。
-pub const BOUNCE_DISTANCE_LOGICAL: f64 = 24.0;
+pub const BOUNCE_DISTANCE_LOGICAL: f64 = 72.0;
 /// 松手弹走的时长（毫秒）。与前端 BOUNCE_MS 一致。
-pub const BOUNCE_MS: u64 = 220;
+pub const BOUNCE_MS: u64 = 700;
 
 /// 采样间隔（约 60Hz）。
 const TICK: Duration = Duration::from_millis(16);
@@ -258,10 +258,11 @@ fn bounce_delta(edges: Edges, scale: f64, distance_logical: f64) -> (i32, i32) {
     ((dx * scale).round() as i32, (dy * scale).round() as i32)
 }
 
-/// ease-out cubic：与前端 bounceEase 同一条曲线。
+/// ease-out expo：与前端 bounceEase 同一条曲线（冰面滑行：前段极快、后段慢蹭）。
 fn bounce_ease(t: f64) -> f64 {
     let t = t.clamp(0.0, 1.0);
-    1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t)
+    // 归一化 expo：端点严格为 1，避免末帧多跳一格（前端 bounceEase 同一条曲线）。
+    (1.0 - 2f64.powf(-10.0 * t)) / (1.0 - 2f64.powf(-10.0))
 }
 
 /// 松手后把窗口往屏幕内部"弹"一段，然后停在那儿（不回贴边）。
@@ -749,8 +750,8 @@ mod tests {
     #[test]
     fn constants_match_the_front_end() {
         // 与 src/ui/edgePressure.ts 的 BOUNCE_DISTANCE / BOUNCE_MS 一致。
-        assert_eq!(BOUNCE_DISTANCE_LOGICAL, 24.0);
-        assert_eq!(BOUNCE_MS, 220);
+        assert_eq!(BOUNCE_DISTANCE_LOGICAL, 72.0);
+        assert_eq!(BOUNCE_MS, 700);
     }
 
     const FAR: Edges = Edges {
@@ -808,7 +809,10 @@ mod tests {
         assert_eq!(bounce_ease(0.0), 0.0);
         assert_eq!(bounce_ease(1.0), 1.0);
         assert!(bounce_ease(0.5) > 0.5);
-        assert!((bounce_ease(0.5) - 0.875).abs() < 1e-12);
+        // 冰面手感用行为钉住：前 10% 时间走掉 40% 以上，末段几乎不动。
+        assert!(bounce_ease(0.1) > 0.4);
+        assert!(bounce_ease(0.5) > 0.8);
+        assert!((1.0 - bounce_ease(0.9)).abs() < 0.02);
         let mut last = 1.0;
         for step in 1..=14 {
             let delta = bounce_ease(step as f64 / 14.0) - bounce_ease((step - 1) as f64 / 14.0);

@@ -190,15 +190,20 @@ export function reboundFrames(from: EdgeTransform): ReboundFrame[] {
  * ------------------------------------------------------------------ */
 
 /** 松手弹走的距离（逻辑像素，按压缩量等比缩放）。 */
-export const BOUNCE_DISTANCE = 24;
+export const BOUNCE_DISTANCE = 72;
 
 /** 松手弹走的时长（毫秒）。 */
-export const BOUNCE_MS = 220;
+export const BOUNCE_MS = 700;
 
-/** 弹走的缓动：ease-out cubic（与 Rust 侧 bounce_ease 同一条曲线）。 */
+/**
+ * 弹走的缓动：ease-out expo（与 Rust 侧 bounce_ease 同一条曲线）。
+ * 选它而不是 cubic，是因为「冰面滑行」要前段极快、后段长时间慢慢蹭：
+ * 700ms 的第十成时间（前 70ms）就走掉约一半距离，剩下六成时间只走最后几个像素。
+ */
 export function bounceEase(t: number): number {
   const clamped = clamp01(t);
-  return 1 - (1 - clamped) * (1 - clamped) * (1 - clamped);
+  // 归一化的 expo：除以 t=1 时的值，端点严格等于 1，末帧不会突然多跳一下。
+  return (1 - Math.pow(2, -10 * clamped)) / (1 - Math.pow(2, -10));
 }
 
 /** 屏幕矩形：x/y 是左上角，y 向下；逻辑像素。工作区（rcWork）用同一个形状。 */
