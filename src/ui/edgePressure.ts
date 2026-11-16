@@ -178,3 +178,105 @@ export function reboundFrames(from: EdgeTransform): ReboundFrame[] {
   const ys = reboundAxis(from.sy);
   return REBOUND_OFFSETS.map((offset, index) => ({ offset, sx: xs[index], sy: ys[index] }));
 }
+
+/* ------------------------------------------------------------------ *
+ * 屏幕边界：不许拖出工作区 + 松手弹走
+ *
+ * 这两组算术有**两份实现**，必须逐字对齐：
+ * - 这里：规范 + 单测（逻辑像素、可读的整数）；
+ * - src-tauri/src/edge_watch.rs：真正执行（物理像素）。Rust 侧常量
+ *   BOUNCE_DISTANCE_LOGICAL / BOUNCE_MS 与下面的 BOUNCE_DISTANCE / BOUNCE_MS 一致，
+ *   两端各有一份测试把这套数字钉死。
+ * ------------------------------------------------------------------ */
+
+/** 松手弹走的距离（逻辑像素，按压缩量等比缩放）。 */
+export const BOUNCE_DISTANCE = 12;
+
+/** 松手弹走的时长（毫秒）。 */
+export const BOUNCE_MS = 220;
+
+/** 弹走的缓动：ease-out cubic（与 Rust 侧 bounce_ease 同一条曲线）。 */
+export function bounceEase(t: number): number {
+  const clamped = clamp01(t);
+  return 1 - (1 - clamped) * (1 - clamped) * (1 - clamped);
+}
+
+/** 屏幕矩形：x/y 是左上角，y 向下；逻辑像素。工作区（rcWork）用同一个形状。 */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+function clampAxis(start: number, size: number, areaStart: number, areaSize: number): number {
+  if (!Number.isFinite(start) || !Number.isFinite(areaStart)) return 0;
+  const safeSize = Number.isFinite(size) ? Math.max(0, size) : 0;
+  const safeArea = Number.isFinite(areaSize) ? Math.max(0, areaSize) : 0;
+  // 比工作区还大：只能按左上角对齐，另一端允许超出（否则会把人逼到"永远有半个屏幕在屏幕外"）。
+  if (safeSize >= safeArea) return areaStart;
+  const maxStart = areaStart + safeArea - safeSize;
+  if (start < areaStart) return areaStart;
+  if (start > maxStart) return maxStart;
+  return start;
+}
+
+/**
+ * 把矩形夹进工作区。
+ *
+ * - 完全在里面：原样返回（同一个对象，调用方可以据此判断"没动"）；
+ * - 越左/右/上/下：夹回对应边界；
+ * - 比工作区还大：按左上角对齐，允许另一端超出（取舍：可见区域最大，且不会被反复推动）；
+ * - 负坐标（副屏在主屏左边，工作区 x < 0）按普通算术处理，不做任何"不许为负"的假设。
+ */
+export function clampToWorkArea(rect: Rect, workArea: Rect): Rect {
+  const x = clampAxis(rect.x, rect.width, workArea.x, workArea.width);
+  const y = clampAxis(rect.y, rect.height, workArea.y, workArea.height);
+  if (x === rect.x && y === rect.y) return rect;
+  return { x, y, width: rect.width, height: rect.height };
+}
+
+export interface BounceOptions {
+  /** 满压缩时的位移（逻辑像素），默认 BOUNCE_DISTANCE。 */
+  distance?: number;
+  /** 判定"被压住"的阈值，默认 EDGE_THRESHOLD。 */
+  threshold?: number;
+}
+
+/**
+ * 松手弹走后的目标矩形。
+ *
+ * 方向沿被压那条边的**法线朝屏幕内部**：贴左 +x、贴右 -x、贴上 +y、贴下 -y；
+ * 角落两轴同时被压，两个方向自然合成（对角外弹）。
+ * 距离按压缩量等比缩放（压缩 50% 就弹 6px），满压缩 = distance。
+ * 压缩量为 0 时原样返回（不弹）；终点最后再走一次 clampToWorkArea，绝不从一边弹到越界。
+ */
+export function bounceAway(
+  rect: Rect,
+  edges: EdgeDistances,
+  workArea: Rect,
+  options: BounceOptions = {},
+): Rect {
+  const distance = Number.isFinite(options.distance) ? (options.distance as number) : BOUNCE_DISTANCE;
+  if (distance <= 0) return rect;
+  const threshold = options.threshold ?? EDGE_THRESHOLD;
+
+  const left = proximityOf(edges.left, threshold);
+  const right = proximityOf(edges.right, threshold);
+  const top = proximityOf(edges.top, threshold);
+  const bottom = proximityOf(edges.bottom, threshold);
+
+  const dx = distance * (left - right);
+  const dy = distance * (top - bottom);
+  if (dx === 0 && dy === 0) return rect;
+
+  return clampToWorkArea(
+    {
+      x: Math.round(rect.x + dx),
+      y: Math.round(rect.y + dy),
+      width: rect.width,
+      height: rect.height,
+    },
+    workArea,
+  );
+}

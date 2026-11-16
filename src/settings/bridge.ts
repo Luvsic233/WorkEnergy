@@ -54,11 +54,11 @@ export function isDesktop(): boolean {
 }
 
 /** 调自定义命令；不在 Tauri 里或失败时静默，不影响纯网页预览。 */
-export async function invoke(command: string): Promise<void> {
+export async function invoke(command: string, args?: Record<string, unknown>): Promise<void> {
   const fn = runtime()?.core?.invoke;
   if (!fn) return;
   try {
-    await fn(command);
+    await fn(command, args);
   } catch {
     // 原生侧不可用（预览 / 命令被拒）时不需要打扰用户。
   }
@@ -130,8 +130,8 @@ export async function listenPayload<T>(
  * emit bar:edge；左键一松 emit bar:edge-end 并自己退出。
  * 必须在 startDragging() 之前调 —— 拖动一旦交给 OS，webview 就收不到任何鼠标事件了。
  */
-export function beginEdgeWatch(): void {
-  void invoke("begin_edge_watch");
+export function beginEdgeWatch(options?: { bounce?: boolean }): void {
+  void invoke("begin_edge_watch", { bounce: options?.bounce ?? true });
 }
 
 /** 结束观察（组件卸载 / 收尾）；Rust 侧线程的下一个 tick 会自己退出。 */

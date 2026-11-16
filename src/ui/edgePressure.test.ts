@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  BOUNCE_DISTANCE,
+  BOUNCE_MS,
   DEFAULT_EDGE_OPTIONS,
   EDGE_THRESHOLD,
   IDENTITY_TRANSFORM,
@@ -8,6 +10,9 @@ import {
   REBOUND_MS,
   REBOUND_OFFSETS,
   REBOUND_OVERSHOOT,
+  bounceAway,
+  bounceEase,
+  clampToWorkArea,
   edgeCompression,
   edgesFromPayload,
   isIdentity,
@@ -17,6 +22,9 @@ import {
   transformOriginCss,
   type EdgeDistances,
 } from "./edgePressure";
+
+/** 期望值里到处要用 12：单独起个名字，读起来比裸数字清楚。 */
+const BOUNCE = BOUNCE_DISTANCE;
 
 /** 离得很远：四个方向都超阈值。 */
 const FAR: EdgeDistances = { left: 400, right: 400, top: 200, bottom: 200 };
@@ -265,6 +273,200 @@ describe("edgePressure：松手回弹关键帧", () => {
       expect(frame.sx).toBeLessThan(1.04 + 1e-9);
       expect(frame.sy).toBeGreaterThan(0.9 - 1e-9);
       expect(frame.sy).toBeLessThan(1.04 + 1e-9);
+    }
+  });
+});
+describe("clampToWorkArea：不许拖出工作区", () => {
+  // 主屏工作区（任务栏已排除：1920x1032）。
+  const WORK = { x: 0, y: 0, width: 1920, height: 1032 };
+  const CARD = { width: 320, height: 96 };
+
+  it("returns the very same rect when it is already inside", () => {
+    const inside = { x: 640, y: 400, ...CARD };
+    expect(clampToWorkArea(inside, WORK)).toBe(inside);
+  });
+
+  it("keeps a rect that sits flush against each edge (0px overhang stays 0)", () => {
+    for (const rect of [
+      { x: 0, y: 400, ...CARD },
+      { x: WORK.width - CARD.width, y: 400, ...CARD },
+      { x: 640, y: 0, ...CARD },
+      { x: 640, y: WORK.height - CARD.height, ...CARD },
+    ]) {
+      expect(clampToWorkArea(rect, WORK)).toBe(rect);
+    }
+  });
+
+  it("pulls an overhanging rect back to the left / right / top / bottom edge", () => {
+    expect(clampToWorkArea({ x: -6, y: 400, ...CARD }, WORK)).toEqual({ x: 0, y: 400, ...CARD });
+    expect(clampToWorkArea({ x: WORK.width - CARD.width + 6, y: 400, ...CARD }, WORK)).toEqual({
+      x: WORK.width - CARD.width,
+      y: 400,
+      ...CARD,
+    });
+    expect(clampToWorkArea({ x: 640, y: -6, ...CARD }, WORK)).toEqual({ x: 640, y: 0, ...CARD });
+    expect(clampToWorkArea({ x: 640, y: WORK.height - CARD.height + 6, ...CARD }, WORK)).toEqual({
+      x: 640,
+      y: WORK.height - CARD.height,
+      ...CARD,
+    });
+  });
+
+  it("pulls a corner back on both axes at once", () => {
+    expect(clampToWorkArea({ x: -400, y: -400, ...CARD }, WORK)).toEqual({ x: 0, y: 0, ...CARD });
+    expect(clampToWorkArea({ x: 9000, y: 9000, ...CARD }, WORK)).toEqual({
+      x: WORK.width - CARD.width,
+      y: WORK.height - CARD.height,
+      ...CARD,
+    });
+  });
+
+  it("aligns a rect bigger than the work area to its top-left and lets the far side overflow", () => {
+    expect(clampToWorkArea({ x: -50, y: -50, width: 2400, height: 1400 }, WORK)).toEqual({
+      x: 0,
+      y: 0,
+      width: 2400,
+      height: 1400,
+    });
+    // 刚好一样大：只有左上对齐这一个合法位置。
+    expect(clampToWorkArea({ x: 123, y: 456, width: 1920, height: 1032 }, WORK)).toEqual({
+      x: 0,
+      y: 0,
+      width: 1920,
+      height: 1032,
+    });
+  });
+
+  it("handles a monitor to the left of the primary one (negative work area)", () => {
+    const secondary = { x: -1920, y: -200, width: 1920, height: 1080 };
+    const inside = { x: -1700, y: 0, ...CARD };
+    expect(clampToWorkArea(inside, secondary)).toBe(inside);
+
+    // 只是越左：y 本来就落在工作区内，不该被动。
+    expect(clampToWorkArea({ x: -2000, y: 0, ...CARD }, secondary)).toEqual({
+      x: -1920,
+      y: 0,
+      ...CARD,
+    });
+    // 越右（已经跑到主屏去了）：夹回 -320，y 同样不动。
+    expect(clampToWorkArea({ x: 100, y: 0, ...CARD }, secondary)).toEqual({
+      x: -320,
+      y: 0,
+      ...CARD,
+    });
+    expect(clampToWorkArea({ x: -1000, y: -900, ...CARD }, secondary)).toEqual({
+      x: -1000,
+      y: -200,
+      ...CARD,
+    });
+  });
+
+  it("survives NaN / Infinity without producing NaN coordinates", () => {
+    const clamped = clampToWorkArea({ x: Number.NaN, y: Number.POSITIVE_INFINITY, ...CARD }, WORK);
+    expect(Number.isFinite(clamped.x)).toBe(true);
+    expect(Number.isFinite(clamped.y)).toBe(true);
+  });
+});
+
+describe("bounceAway：松手弹走", () => {
+  const WORK = { x: 0, y: 0, width: 1920, height: 1032 };
+  const CARD = { width: 320, height: 96 };
+  const FAR = { left: 400, right: 400, top: 200, bottom: 200 };
+  const FLUSH_LEFT = { x: 0, y: 400, ...CARD };
+  const FLUSH_RIGHT = { x: WORK.width - CARD.width, y: 400, ...CARD };
+  const FLUSH_TOP = { x: 640, y: 0, ...CARD };
+  const FLUSH_BOTTOM = { x: 640, y: WORK.height - CARD.height, ...CARD };
+
+  it("uses the documented 12 logical px / 220 ms", () => {
+    expect(BOUNCE_DISTANCE).toBe(12);
+    expect(BOUNCE_MS).toBe(220);
+    expect(BOUNCE_DISTANCE).toBeGreaterThanOrEqual(8);
+    expect(BOUNCE_DISTANCE).toBeLessThanOrEqual(16);
+    expect(BOUNCE_MS).toBeGreaterThanOrEqual(180);
+    expect(BOUNCE_MS).toBeLessThanOrEqual(280);
+  });
+
+  it("pushes a left-pressed card inwards by +x and lands 12px from the left edge", () => {
+    const target = bounceAway(FLUSH_LEFT, { left: 0, right: 400, top: 200, bottom: 200 }, WORK);
+    expect(target).toEqual({ x: BOUNCE, y: 400, ...CARD });
+    expect(target.x).toBe(12);
+  });
+
+  it("mirrors every direction along the normal of the pressed edge", () => {
+    expect(bounceAway(FLUSH_RIGHT, { left: 400, right: 0, top: 200, bottom: 200 }, WORK).x).toBe(
+      WORK.width - CARD.width - BOUNCE,
+    );
+    expect(bounceAway(FLUSH_TOP, { left: 400, right: 400, top: 0, bottom: 200 }, WORK).y).toBe(BOUNCE);
+    expect(bounceAway(FLUSH_BOTTOM, { left: 400, right: 400, top: 200, bottom: 0 }, WORK).y).toBe(
+      WORK.height - CARD.height - BOUNCE,
+    );
+  });
+
+  it("composes both directions when a corner is pressed", () => {
+    const target = bounceAway({ x: 0, y: 0, ...CARD }, { left: 0, right: 400, top: 0, bottom: 200 }, WORK);
+    expect(target).toEqual({ x: BOUNCE, y: BOUNCE, ...CARD });
+  });
+
+  it("scales the distance with the compression (50% -> 6px, 25% -> 3px)", () => {
+    const half = bounceAway(FLUSH_LEFT, { left: 12, right: 400, top: 200, bottom: 200 }, WORK);
+    expect(half.x).toBe(6);
+    const quarter = bounceAway(FLUSH_LEFT, { left: 18, right: 400, top: 200, bottom: 200 }, WORK);
+    expect(quarter.x).toBe(3);
+  });
+
+  it("does not bounce at all when nothing is compressed (returns the same rect)", () => {
+    const far = { x: 640, y: 400, ...CARD };
+    expect(bounceAway(far, FAR, WORK)).toBe(far);
+    // 恰好等于阈值也算"没被压"。
+    expect(bounceAway(far, { left: EDGE_THRESHOLD, right: 400, top: 200, bottom: 200 }, WORK)).toBe(far);
+    expect(bounceAway(FLUSH_LEFT, { left: 0, right: 400, top: 200, bottom: 200 }, WORK, { distance: 0 })).toBe(
+      FLUSH_LEFT,
+    );
+  });
+
+  it("never bounces out of the work area on the opposite side (nearly full-width card)", () => {
+    const tight = { x: 0, y: 0, width: 1915, height: 96 };
+    const target = bounceAway(tight, { left: 0, right: 400, top: 200, bottom: 200 }, WORK);
+    expect(target.x).toBe(WORK.width - tight.width);
+    expect(target.x + target.width).toBeLessThanOrEqual(WORK.width);
+  });
+
+  it("stays inside a negative-coordinate work area (secondary monitor on the left)", () => {
+    const area = { x: -1920, y: -200, width: 1920, height: 1080 };
+    const pressed = { x: -1920, y: 0, ...CARD };
+    expect(bounceAway(pressed, { left: 0, right: 400, top: 200, bottom: 200 }, area).x).toBe(-1920 + BOUNCE);
+
+    const flushRight = { x: -CARD.width, y: 0, ...CARD };
+    const inward = bounceAway(flushRight, { left: 400, right: 0, top: 200, bottom: 200 }, area);
+    expect(inward.x).toBe(-CARD.width - BOUNCE);
+    expect(inward.x).toBeGreaterThanOrEqual(area.x);
+  });
+
+  it("moves monotonically inwards and every intermediate point is inside the work area", () => {
+    const pressed = { x: 0, y: 400, ...CARD };
+    const target = bounceAway(pressed, { left: 0, right: 400, top: 200, bottom: 200 }, WORK);
+    let previous = pressed.x;
+    for (let step = 1; step <= 14; step += 1) {
+      const x = Math.round(pressed.x + (target.x - pressed.x) * bounceEase(step / 14));
+      expect(x).toBeGreaterThanOrEqual(previous);
+      expect(x).toBeLessThanOrEqual(target.x);
+      previous = x;
+    }
+    expect(previous).toBe(BOUNCE);
+  });
+
+  it("eases out: fast at the start, settled at the end", () => {
+    expect(bounceEase(0)).toBe(0);
+    expect(bounceEase(1)).toBe(1);
+    expect(bounceEase(0.5)).toBeGreaterThan(0.5);
+    expect(bounceEase(0.5)).toBeCloseTo(0.875, 10);
+    // 单调 + 收敛：越靠后每帧的位移越小。
+    let lastStep = 1;
+    for (let step = 1; step <= 14; step += 1) {
+      const delta = bounceEase(step / 14) - bounceEase((step - 1) / 14);
+      expect(delta).toBeGreaterThan(0);
+      expect(delta).toBeLessThanOrEqual(lastStep + 1e-12);
+      lastStep = delta;
     }
   });
 });

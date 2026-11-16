@@ -41,9 +41,10 @@ async fn show_celebration(app: AppHandle) {
 /// async 是有意为之：同步命令跑在主线程上，而这里要取窗口句柄（会回主线程问话）；
 /// 拖动的模态移动循环一旦开始，主线程就没空回话了。所以让命令自己待在异步线程上，
 /// 真正的位置采样全部交给它起的观察线程（见 edge_watch.rs）。
+/// bounce：松手要不要把窗口弹离边缘（前端按 prefers-reduced-motion 决定）。
 #[tauri::command]
-async fn begin_edge_watch(app: AppHandle) -> Result<(), String> {
-    edge_watch::begin(&app)
+async fn begin_edge_watch(app: AppHandle, bounce: Option<bool>) -> Result<(), String> {
+    edge_watch::begin(&app, bounce.unwrap_or(true))
 }
 
 /// 结束观察（组件卸载 / 应用收尾）。同一个线程看门狗 30 秒也会自己退出。

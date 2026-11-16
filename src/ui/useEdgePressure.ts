@@ -171,7 +171,8 @@ export function useEdgePressure(barRef: RefObject<HTMLElement | null>): EdgePres
   return useMemo<EdgePressureHandle>(
     () => ({
       begin() {
-        beginEdgeWatch();
+        // 减弱动效：只关掉"窗口被弹走"，形变回弹那边另有自己的判定。
+        beginEdgeWatch({ bounce: !prefersReducedMotion() });
       },
     }),
     [],
