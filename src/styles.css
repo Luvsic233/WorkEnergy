@@ -65,7 +65,12 @@ body {
   background: var(--theme-bar-bg, rgba(14, 16, 22, 0.62));
   -webkit-backdrop-filter: blur(18px) saturate(140%);
   backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.28);
+  /*
+   * 原来这里是 box-shadow: 0 18px 40px rgba(15,23,42,0.28)。静止时卡片铺满窗口，
+   * 向外的阴影全被窗口边界裁掉，等于看不见；可点击果冻一压扁，卡片缩进去、窗口没变，
+   * 这层阴影就在缝隙里显形，看起来像卡片外面多了一圈灰框。
+   * 既然静止态永远不可见，直接去掉它 —— 缝隙里露出的是真实桌面，没有灰晕。
+   */
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -234,7 +239,6 @@ body {
 /* 被 transform 的元素：单独一层合成，位移不触发 layout / paint。 */
 .bar-value .digit-track {
   display: block;
-  will-change: transform;
   transform: translate3d(0, 0, 0);
 }
 
