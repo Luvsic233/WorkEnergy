@@ -15,7 +15,7 @@
 export const EDGE_THRESHOLD = 24;
 
 /** 被压轴的最大压缩比例（10%）。 */
-export const MAX_SQUASH = 0.1;
+export const MAX_SQUASH = 0.18;
 
 /** 另一轴的最大反向膨胀比例（4%，体积感）。 */
 export const MAX_STRETCH = 0.04;
@@ -190,7 +190,7 @@ export function reboundFrames(from: EdgeTransform): ReboundFrame[] {
  * ------------------------------------------------------------------ */
 
 /** 松手弹走的距离（逻辑像素，按压缩量等比缩放）。 */
-export const BOUNCE_DISTANCE = 12;
+export const BOUNCE_DISTANCE = 24;
 
 /** 松手弹走的时长（毫秒）。 */
 export const BOUNCE_MS = 220;

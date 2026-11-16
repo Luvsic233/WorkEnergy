@@ -57,7 +57,7 @@ describe("edgePressure：贴死单边", () => {
     const transform = edgeCompression(LEFT_FLUSH);
 
     expect(transform.sx).toBeCloseTo(1 - MAX_SQUASH, 10);
-    expect(transform.sx).toBeCloseTo(0.9, 10);
+    expect(transform.sx).toBeCloseTo(1 - MAX_SQUASH, 10);
     // 垂直方向反向膨胀 4%（体积感），而不是整体等比缩小。
     expect(transform.sy).toBeCloseTo(1 + MAX_STRETCH, 10);
     expect(transform.sy).toBeGreaterThan(1);
@@ -69,7 +69,7 @@ describe("edgePressure：贴死单边", () => {
   it("mirrors the origin to the right edge when pressed against the right one", () => {
     const transform = edgeCompression({ left: 400, right: 0, top: 200, bottom: 200 });
 
-    expect(transform.sx).toBeCloseTo(0.9, 10);
+    expect(transform.sx).toBeCloseTo(1 - MAX_SQUASH, 10);
     expect(transform.originX).toBe(100);
     expect(transform.originY).toBe(50);
   });
@@ -77,8 +77,8 @@ describe("edgePressure：贴死单边", () => {
   it("squashes the vertical axis when pressed against the top edge", () => {
     const transform = edgeCompression({ left: 400, right: 400, top: 0, bottom: 200 });
 
-    expect(transform.sy).toBeCloseTo(0.9, 10);
-    expect(transform.sx).toBeCloseTo(1.04, 10);
+    expect(transform.sy).toBeCloseTo(1 - MAX_SQUASH, 10);
+    expect(transform.sx).toBeCloseTo(1 + MAX_STRETCH, 10);
     expect(transform.originX).toBe(50);
     expect(transform.originY).toBe(0);
   });
@@ -86,7 +86,7 @@ describe("edgePressure：贴死单边", () => {
   it("squashes the vertical axis downwards when pressed against the bottom edge", () => {
     const transform = edgeCompression({ left: 400, right: 400, top: 200, bottom: 0 });
 
-    expect(transform.sy).toBeCloseTo(0.9, 10);
+    expect(transform.sy).toBeCloseTo(1 - MAX_SQUASH, 10);
     expect(transform.originY).toBe(100);
   });
 });
@@ -97,8 +97,8 @@ describe("edgePressure：角落两轴同时压", () => {
 
     expect(transform.sx).toBeLessThan(1);
     expect(transform.sy).toBeLessThan(1);
-    expect(transform.sx).toBeCloseTo(0.9, 10);
-    expect(transform.sy).toBeCloseTo(0.9, 10);
+    expect(transform.sx).toBeCloseTo(1 - MAX_SQUASH, 10);
+    expect(transform.sy).toBeCloseTo(1 - MAX_SQUASH, 10);
     expect(transform.originX).toBe(100);
     expect(transform.originY).toBe(0);
     // 角落不再有体积膨胀的余量：两轴同时被压，乘积明显小于 1。
@@ -128,7 +128,7 @@ describe("edgePressure：边界值与非法输入", () => {
     expect(isIdentity(edgeCompression({ left: EDGE_THRESHOLD, right: 400, top: 200, bottom: 200 }))).toBe(true);
 
     expect(proximityOf(0)).toBe(1);
-    expect(edgeCompression({ left: 0, right: 400, top: 200, bottom: 200 }).sx).toBeCloseTo(0.9, 10);
+    expect(edgeCompression({ left: 0, right: 400, top: 200, bottom: 200 }).sx).toBeCloseTo(1 - MAX_SQUASH, 10);
   });
 
   it("clamps negative distances (the window pushed past the edge) to full squash", () => {
@@ -155,10 +155,10 @@ describe("edgePressure：边界值与非法输入", () => {
     for (const left of values) {
       for (const top of values) {
         const transform = edgeCompression({ left, right: 400, top, bottom: 400 });
-        expect(transform.sx).toBeGreaterThanOrEqual(0.9 - 1e-9);
-        expect(transform.sx).toBeLessThanOrEqual(1.04 + 1e-9);
-        expect(transform.sy).toBeGreaterThanOrEqual(0.9 - 1e-9);
-        expect(transform.sy).toBeLessThanOrEqual(1.04 + 1e-9);
+        expect(transform.sx).toBeGreaterThanOrEqual(1 - MAX_SQUASH - 1e-9);
+        expect(transform.sx).toBeLessThanOrEqual(1 + MAX_STRETCH + 1e-9);
+        expect(transform.sy).toBeGreaterThanOrEqual(1 - MAX_SQUASH - 1e-9);
+        expect(transform.sy).toBeLessThanOrEqual(1 + MAX_STRETCH + 1e-9);
       }
     }
   });
@@ -188,7 +188,7 @@ describe("edgePressure：边界值与非法输入", () => {
 
   it("keeps the documented defaults", () => {
     expect(DEFAULT_EDGE_OPTIONS.threshold).toBe(24);
-    expect(DEFAULT_EDGE_OPTIONS.maxSquash).toBeCloseTo(0.1, 10);
+    expect(DEFAULT_EDGE_OPTIONS.maxSquash).toBeCloseTo(MAX_SQUASH, 10);
     expect(DEFAULT_EDGE_OPTIONS.maxStretch).toBeCloseTo(0.04, 10);
     expect(DEFAULT_EDGE_OPTIONS.scale).toBe(1);
   });
@@ -197,7 +197,7 @@ describe("edgePressure：边界值与非法输入", () => {
 describe("edgePressure：DOM 字符串", () => {
   it("serialises the transform and the origin for inline style writes", () => {
     const transform = edgeCompression(TOP_RIGHT);
-    expect(transformCss(transform)).toBe("scale(0.9000, 0.9000)");
+    expect(transformCss(transform)).toBe("scale(0.8200, 0.8200)");
     expect(transformOriginCss(transform)).toBe("100% 0%");
 
     expect(transformCss(IDENTITY_TRANSFORM)).toBe("scale(1.0000, 1.0000)");
@@ -210,14 +210,14 @@ describe("edgePressure：事件 payload", () => {
     const edges = edgesFromPayload({ pxLeft: -6, pxRight: 400, pxTop: 200, pxBottom: 200, left: 1, right: 0 });
     expect(edges.left).toBe(-6);
     expect(edges.right).toBe(400);
-    expect(edgeCompression(edges).sx).toBeCloseTo(0.9, 10);
+    expect(edgeCompression(edges).sx).toBeCloseTo(1 - MAX_SQUASH, 10);
   });
 
   it("falls back to the 0..1 proximity when the pixel fields are missing", () => {
     const edges = edgesFromPayload({ left: 1, right: 0, top: 0, bottom: 0 });
     expect(edges.left).toBe(0);
     expect(edges.right).toBe(EDGE_THRESHOLD);
-    expect(edgeCompression(edges).sx).toBeCloseTo(0.9, 10);
+    expect(edgeCompression(edges).sx).toBeCloseTo(1 - MAX_SQUASH, 10);
   });
 
   it("treats an empty payload as 'far from every edge'", () => {
@@ -269,10 +269,10 @@ describe("edgePressure：松手回弹关键帧", () => {
 
   it("stays inside the 0.90..1.04 envelope for a corner compression", () => {
     for (const frame of reboundFrames(edgeCompression(TOP_RIGHT))) {
-      expect(frame.sx).toBeGreaterThan(0.9 - 1e-9);
-      expect(frame.sx).toBeLessThan(1.04 + 1e-9);
-      expect(frame.sy).toBeGreaterThan(0.9 - 1e-9);
-      expect(frame.sy).toBeLessThan(1.04 + 1e-9);
+      expect(frame.sx).toBeGreaterThan(1 - MAX_SQUASH - 1e-9);
+      expect(frame.sx).toBeLessThan(1 + MAX_STRETCH + 1e-9);
+      expect(frame.sy).toBeGreaterThan(1 - MAX_SQUASH - 1e-9);
+      expect(frame.sy).toBeLessThan(1 + MAX_STRETCH + 1e-9);
     }
   });
 });
@@ -377,19 +377,19 @@ describe("bounceAway：松手弹走", () => {
   const FLUSH_TOP = { x: 640, y: 0, ...CARD };
   const FLUSH_BOTTOM = { x: 640, y: WORK.height - CARD.height, ...CARD };
 
-  it("uses the documented 12 logical px / 220 ms", () => {
-    expect(BOUNCE_DISTANCE).toBe(12);
+  it("uses the documented bounce distance / duration", () => {
+    expect(BOUNCE_DISTANCE).toBe(24);
     expect(BOUNCE_MS).toBe(220);
     expect(BOUNCE_DISTANCE).toBeGreaterThanOrEqual(8);
-    expect(BOUNCE_DISTANCE).toBeLessThanOrEqual(16);
+    expect(BOUNCE_DISTANCE).toBeLessThanOrEqual(32);
     expect(BOUNCE_MS).toBeGreaterThanOrEqual(180);
     expect(BOUNCE_MS).toBeLessThanOrEqual(280);
   });
 
-  it("pushes a left-pressed card inwards by +x and lands 12px from the left edge", () => {
+  it("pushes a left-pressed card inwards by +x and lands BOUNCE_DISTANCE from the left edge", () => {
     const target = bounceAway(FLUSH_LEFT, { left: 0, right: 400, top: 200, bottom: 200 }, WORK);
     expect(target).toEqual({ x: BOUNCE, y: 400, ...CARD });
-    expect(target.x).toBe(12);
+    expect(target.x).toBe(BOUNCE_DISTANCE);
   });
 
   it("mirrors every direction along the normal of the pressed edge", () => {
@@ -409,9 +409,9 @@ describe("bounceAway：松手弹走", () => {
 
   it("scales the distance with the compression (50% -> 6px, 25% -> 3px)", () => {
     const half = bounceAway(FLUSH_LEFT, { left: 12, right: 400, top: 200, bottom: 200 }, WORK);
-    expect(half.x).toBe(6);
+    expect(half.x).toBe(BOUNCE_DISTANCE / 2);
     const quarter = bounceAway(FLUSH_LEFT, { left: 18, right: 400, top: 200, bottom: 200 }, WORK);
-    expect(quarter.x).toBe(3);
+    expect(quarter.x).toBe(BOUNCE_DISTANCE / 4);
   });
 
   it("does not bounce at all when nothing is compressed (returns the same rect)", () => {

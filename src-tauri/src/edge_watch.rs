@@ -35,7 +35,7 @@ use crate::desktop;
 pub const THRESHOLD_LOGICAL: f64 = 24.0;
 
 /// 松手弹走的距离（逻辑像素，满压缩时）。与前端 BOUNCE_DISTANCE 一致。
-pub const BOUNCE_DISTANCE_LOGICAL: f64 = 12.0;
+pub const BOUNCE_DISTANCE_LOGICAL: f64 = 24.0;
 /// 松手弹走的时长（毫秒）。与前端 BOUNCE_MS 一致。
 pub const BOUNCE_MS: u64 = 220;
 
@@ -749,7 +749,7 @@ mod tests {
     #[test]
     fn constants_match_the_front_end() {
         // 与 src/ui/edgePressure.ts 的 BOUNCE_DISTANCE / BOUNCE_MS 一致。
-        assert_eq!(BOUNCE_DISTANCE_LOGICAL, 12.0);
+        assert_eq!(BOUNCE_DISTANCE_LOGICAL, 24.0);
         assert_eq!(BOUNCE_MS, 220);
     }
 
