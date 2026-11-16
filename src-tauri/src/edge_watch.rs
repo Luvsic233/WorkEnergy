@@ -34,10 +34,22 @@ use crate::desktop;
 /// 进入边缘 24 逻辑像素开始渐入：必须与前端 src/ui/edgePressure.ts 的 EDGE_THRESHOLD 一致。
 pub const THRESHOLD_LOGICAL: f64 = 24.0;
 
-/// 松手弹走的距离（逻辑像素，满压缩时）。与前端 BOUNCE_DISTANCE 一致。
-pub const BOUNCE_DISTANCE_LOGICAL: f64 = 72.0;
-/// 松手弹走的时长（毫秒）。与前端 BOUNCE_MS 一致。
-pub const BOUNCE_MS: u64 = 700;
+/// 满压缩时的初速度（逻辑像素/秒）：挤压越狠，这一脚踢得越快。与前端 BOUNCE_KICK_SPEED 一致。
+pub const BOUNCE_KICK_SPEED: f64 = 3168.0;
+/// 指数摩擦系数（1/秒）：速度按 e^(-k t) 衰减。与前端 BOUNCE_FRICTION 一致。
+pub const BOUNCE_FRICTION: f64 = 4.4;
+/// 剩余不足这个距离（逻辑像素）就算滑停。与前端 BOUNCE_SETTLE_PX 一致。
+pub const BOUNCE_SETTLE_PX: f64 = 0.5;
+/// 满压缩时的滑行距离（逻辑像素）= 初速度 ÷ 摩擦。与前端 BOUNCE_DISTANCE 一致。
+pub const BOUNCE_DISTANCE_LOGICAL: f64 = 720.0;
+
+/// 滑行时长：距离越远滑得越久（对数关系）。与前端 bounceDurationMs 一致。
+fn bounce_duration_ms(distance: f64) -> f64 {
+    if !distance.is_finite() || distance <= BOUNCE_SETTLE_PX {
+        return 0.0;
+    }
+    (distance / BOUNCE_SETTLE_PX).ln() / BOUNCE_FRICTION * 1000.0
+}
 
 /// 采样间隔（约 60Hz）。
 const TICK: Duration = Duration::from_millis(16);
@@ -279,6 +291,10 @@ fn bounce_away(hwnd: isize, generation: u64) {
         desktop::trace("edge-watch: bounce skipped (no compression)");
         return;
     }
+    // 这次实际要滑多远（逻辑像素）→ 由它反推时长；压得越狠滑得越远也越久。
+    let travel_phys = ((dx * dx + dy * dy) as f64).sqrt();
+    let travel_logical = travel_phys / start.scale.max(0.1);
+    let duration_ms = bounce_duration_ms(travel_logical);
     let mut target = raw::RECT {
         left: start.x + dx,
         top: start.y + dy,
@@ -298,7 +314,7 @@ fn bounce_away(hwnd: isize, generation: u64) {
         start.y,
         target.left,
         target.top,
-        BOUNCE_MS,
+        duration_ms as u64,
         start.scale
     ));
 
@@ -311,7 +327,11 @@ fn bounce_away(hwnd: isize, generation: u64) {
             return;
         }
         let elapsed = began.elapsed();
-        let t = elapsed.as_secs_f64() / (BOUNCE_MS as f64 / 1000.0);
+        let t = if duration_ms <= 0.0 {
+            1.0
+        } else {
+            elapsed.as_secs_f64() / (duration_ms / 1000.0)
+        };
         let (x, y) = if t >= 1.0 {
             (target.left, target.top)
         } else {
@@ -736,7 +756,10 @@ fn overhang(rect: &raw::RECT, work: &raw::RECT) -> i32 {
 
 #[cfg(all(test, windows))]
 mod tests {
-    use super::{bounce_delta, bounce_ease, proximity, Edges, BOUNCE_DISTANCE_LOGICAL, BOUNCE_MS};
+    use super::{
+        bounce_delta, bounce_duration_ms, bounce_ease, proximity, Edges, BOUNCE_DISTANCE_LOGICAL,
+        BOUNCE_FRICTION, BOUNCE_KICK_SPEED, BOUNCE_SETTLE_PX,
+    };
 
     #[test]
     fn proximity_hits_both_bounds() {
@@ -749,9 +772,21 @@ mod tests {
 
     #[test]
     fn constants_match_the_front_end() {
-        // 与 src/ui/edgePressure.ts 的 BOUNCE_DISTANCE / BOUNCE_MS 一致。
-        assert_eq!(BOUNCE_DISTANCE_LOGICAL, 72.0);
-        assert_eq!(BOUNCE_MS, 700);
+        // 与 src/ui/edgePressure.ts 的 BOUNCE_KICK_SPEED / BOUNCE_FRICTION / BOUNCE_SETTLE_PX 一致。
+        assert_eq!(BOUNCE_KICK_SPEED, 3168.0);
+        assert_eq!(BOUNCE_FRICTION, 4.4);
+        assert_eq!(BOUNCE_SETTLE_PX, 0.5);
+        // 满压缩滑 720px（半个 1440 宽的屏幕）、约 1.65s；压一半滑 360px、约 1.50s。
+        assert!((BOUNCE_DISTANCE_LOGICAL - 720.0).abs() < 1e-9);
+        // 距离必须是「初速度 ÷ 摩擦」的取整值，否则两个常量会被改歪。
+        let derived = BOUNCE_KICK_SPEED / BOUNCE_FRICTION;
+        assert!((derived - BOUNCE_DISTANCE_LOGICAL).abs() < 0.5, "derived={derived}");
+        let full = bounce_duration_ms(BOUNCE_DISTANCE_LOGICAL);
+        let half = bounce_duration_ms(BOUNCE_DISTANCE_LOGICAL / 2.0);
+        assert!((full - 1653.0).abs() < 15.0, "full={full}");
+        assert!((half - 1495.0).abs() < 15.0, "half={half}");
+        assert!(full > half);
+        assert_eq!(bounce_duration_ms(0.4), 0.0);
     }
 
     const FAR: Edges = Edges {

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   BOUNCE_DISTANCE,
-  BOUNCE_MS,
   DEFAULT_EDGE_OPTIONS,
   EDGE_THRESHOLD,
   IDENTITY_TRANSFORM,
+  bounceDurationMs,
   MAX_SQUASH,
   MAX_STRETCH,
   REBOUND_MS,
@@ -378,12 +378,12 @@ describe("bounceAway：松手弹走", () => {
   const FLUSH_BOTTOM = { x: 640, y: WORK.height - CARD.height, ...CARD };
 
   it("uses the documented bounce distance / duration", () => {
-    expect(BOUNCE_DISTANCE).toBe(72);
-    expect(BOUNCE_MS).toBe(700);
+    expect(BOUNCE_DISTANCE).toBe(720);
+    expect(bounceDurationMs(BOUNCE_DISTANCE)).toBeCloseTo(1653, 0);
+    expect(bounceDurationMs(BOUNCE_DISTANCE / 2)).toBeCloseTo(1495, 0);
     expect(BOUNCE_DISTANCE).toBeGreaterThanOrEqual(8);
-    expect(BOUNCE_DISTANCE).toBeLessThanOrEqual(120);
-    expect(BOUNCE_MS).toBeGreaterThanOrEqual(180);
-    expect(BOUNCE_MS).toBeLessThanOrEqual(1200);
+    expect(BOUNCE_DISTANCE).toBeLessThanOrEqual(2000);
+    expect(bounceDurationMs(BOUNCE_DISTANCE)).toBeLessThanOrEqual(4000);
   });
 
   it("pushes a left-pressed card inwards by +x and lands BOUNCE_DISTANCE from the left edge", () => {

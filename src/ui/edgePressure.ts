@@ -189,17 +189,37 @@ export function reboundFrames(from: EdgeTransform): ReboundFrame[] {
  *   两端各有一份测试把这套数字钉死。
  * ------------------------------------------------------------------ */
 
-/** 松手弹走的距离（逻辑像素，按压缩量等比缩放）。 */
-export const BOUNCE_DISTANCE = 72;
+/**
+ * 松手弹走的物理参数：挤压量决定「踢」出去的初速度，摩擦决定它怎么滑停。
+ * 距离与时长都不是手填的常量，而是从这两个数推出来（见 bounceDistance / bounceDurationMs）：
+ * 压得越狠 → 初速度越快 → 滑得越远、也滑得越久。
+ */
+export const BOUNCE_KICK_SPEED = 3168;   // 满压缩时的初速度（逻辑像素/秒）
+export const BOUNCE_FRICTION = 4.4;     // 指数摩擦系数（1/秒）
+export const BOUNCE_SETTLE_PX = 0.5;    // 剩余不足半个像素就算停下
 
-/** 松手弹走的时长（毫秒）。 */
-export const BOUNCE_MS = 700;
+/** 满压缩时的滑行距离（逻辑像素）= 初速度 ÷ 摩擦。取整是为了让 50%/25% 压缩也是整数。 */
+export const BOUNCE_DISTANCE = Math.round(BOUNCE_KICK_SPEED / BOUNCE_FRICTION);
 
 /**
  * 弹走的缓动：ease-out expo（与 Rust 侧 bounce_ease 同一条曲线）。
  * 选它而不是 cubic，是因为「冰面滑行」要前段极快、后段长时间慢慢蹭：
  * 700ms 的第十成时间（前 70ms）就走掉约一半距离，剩下六成时间只走最后几个像素。
  */
+export function bounceDistance(compression: number): number {
+  if (!Number.isFinite(compression)) return 0;
+  return BOUNCE_DISTANCE * clamp01(compression);
+}
+
+/**
+ * 滑行时长：速度 v(t) = v0·e^(-k t)，走到剩余不足半个像素所需的时间。
+ * 距离越远 → 时长越长（对数关系）；距离小于停止阈值 → 0。
+ */
+export function bounceDurationMs(distance: number): number {
+  if (!Number.isFinite(distance) || distance <= BOUNCE_SETTLE_PX) return 0;
+  return (Math.log(distance / BOUNCE_SETTLE_PX) / BOUNCE_FRICTION) * 1000;
+}
+
 export function bounceEase(t: number): number {
   const clamped = clamp01(t);
   // 归一化的 expo：除以 t=1 时的值，端点严格等于 1，末帧不会突然多跳一下。
