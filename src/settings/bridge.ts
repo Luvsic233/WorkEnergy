@@ -139,6 +139,16 @@ export function endEdgeWatch(): void {
   void invoke("end_edge_watch");
 }
 
+/**
+ * 右键「精确摆放」：Rust 侧起一条自己的跟手线程（GetCursorPos + SetWindowPos）。
+ *
+ * 为什么不用 startDragging()：那个 API 只对左键响应，右键按下去它什么都不做。
+ * 这条通道全程不 emit bar:edge —— 右键拖动既不挤压也不会被弹走，只把窗口摆到你放的地方。
+ */
+export function beginRightDrag(): void {
+  void invoke("begin_right_drag");
+}
+
 /** 落 CSS 这一半：档位属性 + 缩放系数。同步执行，所以第一帧画出来就已经是目标档的字号与间距。 */
 function paintSize(preset: SizePreset): SizePresetSpec {
   const spec = sizePresetSpec(preset);

@@ -53,6 +53,17 @@ async fn end_edge_watch() {
     edge_watch::stop();
 }
 
+/// 右键「精确摆放」：前端判定位移越过 4px 阈值后调这里。
+///
+/// 不走 start_dragging（那个只对左键生效），而是起一条自己的跟手线程：
+/// GetCursorPos + SetWindowPos，位置先夹进工作区再落地。全程不 emit bar:edge，
+/// 所以不会挤压也不会弹走 —— 右键拖动只负责把窗口放到你想放的地方。
+/// async 同样是为了不占主线程：取窗口句柄要回主线程问话。
+#[tauri::command]
+async fn begin_right_drag(app: AppHandle) -> Result<(), String> {
+    edge_watch::begin_right_drag(&app)
+}
+
 /// 庆祝弹窗的露出时长（4 秒）到点由前端调：只隐藏，不销毁，下次复用同一个 webview。
 #[tauri::command]
 async fn hide_celebration(app: AppHandle) {
@@ -92,7 +103,8 @@ fn main() {
             show_celebration,
             hide_celebration,
             begin_edge_watch,
-            end_edge_watch
+            end_edge_watch,
+            begin_right_drag
         ])
         .setup(|app| {
             let handle = app.handle();

@@ -11,6 +11,8 @@
  * 松手回弹是同一套"果冻语言"：从当前压缩量出发，先过冲 4% 再回正，500ms。
  */
 
+import { CLICK_MAX_DISTANCE_PX } from "../theme/interaction";
+
 /** 进入边缘多少逻辑像素开始渐入。必须与 Rust 侧 edge_watch.rs 的 THRESHOLD_LOGICAL 一致。 */
 export const EDGE_THRESHOLD = 24;
 
@@ -259,6 +261,86 @@ export function clampToWorkArea(rect: Rect, workArea: Rect): Rect {
   const y = clampAxis(rect.y, rect.height, workArea.y, workArea.height);
   if (x === rect.x && y === rect.y) return rect;
   return { x, y, width: rect.width, height: rect.height };
+}
+
+/* ------------------------------------------------------------------ *
+ * 右键拖动 = 精确摆放（不挤压、不弹走、不许出界）
+ *
+ * 手势区分的分界线与左键点击共用同一个 4px 阈值：左键走 isClickGesture（< 4px 才算点击），
+ * 右键走 isRightDragGesture（>= 4px 才算拖动）。两条判定互补、互不干扰：
+ * 同一次手势不可能既是右键拖动又是左键点击（按钮不同），位移也不可能同时 < 4px 且 >= 4px。
+ * ------------------------------------------------------------------ */
+
+/** 右键拖动的最小位移（css px，欧氏距离）：与点击阈值同源，恰好 4px 起算拖动。 */
+export const RIGHT_DRAG_THRESHOLD_PX = CLICK_MAX_DISTANCE_PX;
+
+/** 右键在 pointerdown / pointermove 的 button / buttons 位上的值。 */
+export const RIGHT_BUTTON = 2;
+
+/** pointerdown 记下的起点（右键）。 */
+export interface RightDragStart {
+  x: number;
+  y: number;
+  /** pointerdown 的 button：给了就必须是 2（右键），否则这次手势与右键无关。 */
+  button?: number;
+  t?: number;
+}
+
+/** pointermove 的当前位置。 */
+export interface RightDragMove {
+  x: number;
+  y: number;
+  /** pointermove 的 buttons 位：给了就必须仍含右键（2），松手后不该再判成拖动。 */
+  buttons?: number;
+}
+
+/**
+ * 按下 → 移动 是否已经构成「右键拖动」。
+ *
+ * 三条兜底都是为了"一次坏事件绝不启动一条跟手线程"：
+ * - 任一坐标不是有限值 → false（NaN / Infinity）；
+ * - down.button 给了但不是 2 → false；
+ * - move.buttons 给了但不含右键 → false（松开事件丢了时也不许继续拖）。
+ * 位移用欧氏距离的平方比较，与 isClickGesture 的边界严丝合缝：恰好 4px 算拖动、不算点击。
+ */
+export function isRightDragGesture(down: RightDragStart, move: RightDragMove): boolean {
+  const numbers = [down.x, down.y, move.x, move.y];
+  if (!numbers.every((value) => Number.isFinite(value))) return false;
+  if (typeof down.button === "number" && down.button !== RIGHT_BUTTON) return false;
+  if (typeof move.buttons === "number" && (move.buttons & RIGHT_BUTTON) === 0) return false;
+  const dx = move.x - down.x;
+  const dy = move.y - down.y;
+  return dx * dx + dy * dy >= RIGHT_DRAG_THRESHOLD_PX * RIGHT_DRAG_THRESHOLD_PX;
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface Size {
+  width: number;
+  height: number;
+}
+
+/**
+ * 右键跟手的目标位置：光标 − 起始偏移，再夹进工作区。
+ *
+ * 与 Rust 侧 follow_cursor 同一条算术（那里是物理像素 + clamp_rect，这里是逻辑像素 + clampToWorkArea），
+ * 两份实现用同一批用例钉住：完全在屏内原样返回、四个方向越界夹回边界、
+ * 窗口比工作区还大时按左上角对齐、负坐标副屏按普通算术处理。
+ */
+export function followTarget(cursor: Point, offset: Point, workArea: Rect, size: Size): Point {
+  const rect = clampToWorkArea(
+    {
+      x: cursor.x - offset.x,
+      y: cursor.y - offset.y,
+      width: size.width,
+      height: size.height,
+    },
+    workArea,
+  );
+  return { x: rect.x, y: rect.y };
 }
 
 export interface BounceOptions {

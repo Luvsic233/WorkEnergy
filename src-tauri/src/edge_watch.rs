@@ -59,6 +59,20 @@ const BOUNCE_TICK: Duration = Duration::from_millis(16);
 const RELEASE_SETTLE: Duration = Duration::from_millis(20);
 /// 看门狗：一次拖动不会很久，超时就让线程自己结束，绝不永久占住一个线程。
 const WATCHDOG: Duration = Duration::from_secs(30);
+/// 右键跟手线程的采样间隔（约 60Hz）。
+const RIGHT_TICK: Duration = Duration::from_millis(16);
+/// 右键跟手线程的看门狗：比左键长得多（精确摆放时用户会慢慢挪），但绝不永久占住一个线程。
+const RIGHT_WATCHDOG: Duration = Duration::from_secs(60);
+
+/// 右键看门狗同样可以被 WE_EDGE_WATCH_SECS 覆盖（只给自测用）。
+fn right_watchdog_limit() -> Duration {
+    std::env::var("WE_EDGE_WATCH_SECS")
+        .ok()
+        .and_then(|value| value.trim().parse::<f64>().ok())
+        .filter(|secs| *secs > 0.0 && *secs <= 600.0)
+        .map(Duration::from_secs_f64)
+        .unwrap_or(RIGHT_WATCHDOG)
+}
 
 /// 看门狗时长可以被 WE_EDGE_WATCH_SECS 覆盖（只给自测用，正式运行永远走 30 秒默认值）。
 fn watchdog_limit() -> Duration {
@@ -77,6 +91,8 @@ pub const EVENT_END: &str = "bar:edge-end";
 
 /// 观察线程的代次：新的观察或主动结束都会 +1，旧线程据此立刻退出。
 static GENERATION: AtomicU64 = AtomicU64::new(0);
+/// 右键跟手线程的代次：与左键观察各用一格，两条通道互不顶替，但同一时刻各自只有一条线程。
+static RIGHT_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// 已装夹取保护的那个窗口句柄（0 = 没装）。
 static GUARDED_HWND: AtomicIsize = AtomicIsize::new(0);
@@ -152,9 +168,32 @@ pub fn begin(app: &AppHandle, bounce: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// 起一次右键「精确摆放」的跟手移动（不挤压、不弹走、绝不 emit 任何贴边事件）。
+///
+/// 为什么不能用 start_dragging：那个 API 内部只对左键响应（tao 的 drag_window 走
+/// WM_NCLBUTTONDOWN + HTCAPTION，等于假装左键按在标题栏上），右键按下去它什么都不会做。
+/// 于是这里自己起一条线程：GetCursorPos + SetWindowPos，位置先夹进工作区再落地。
+///
+/// 代次纪律：右键这一格自增会把上一条右键线程顶掉；同时把左键观察的代次也 +1，
+/// 保证「右键按下时左键观察线程在跑」时它先停 —— 两条跟手通道绝不同时推动同一个窗口。
+pub fn begin_right_drag(app: &AppHandle) -> Result<(), String> {
+    GENERATION.fetch_add(1, Ordering::SeqCst);
+    let window = desktop::main_window(app).ok_or_else(|| "main window missing".to_string())?;
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+    let hwnd = hwnd.0 as isize;
+    let generation = RIGHT_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    thread::Builder::new()
+        .name("right-drag".into())
+        .spawn(move || follow_cursor(hwnd, generation))
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 /// 主动结束当前观察（组件卸载 / 应用收尾）。线程在下一个 tick 自行退出。
 pub fn stop() {
     GENERATION.fetch_add(1, Ordering::SeqCst);
+    // 右键跟手线程也一起收掉：一次卸载不该留下任何一条还在推窗口的线程。
+    RIGHT_GENERATION.fetch_add(1, Ordering::SeqCst);
     remove_move_guard();
     desktop::trace("edge-watch: stop requested");
 }
@@ -386,6 +425,107 @@ fn move_window(hwnd: isize, x: i32, y: i32) {
     }
 }
 
+/// 右键"精确摆放"的跟手线程：位置 = 光标 − 起始偏移，先夹进工作区，再 SetWindowPos 落地。
+///
+/// 三条纪律写在这里：
+/// - 只改位置（SWP_NOSIZE）：窗口尺寸一个像素都不动，前端的自适应宽度因此不会被重新算；
+/// - 绝不 emit bar:edge / bar:edge-end：挤压与弹走是左键那条通道的事，右键只摆位置；
+/// - 松手 / 看门狗超时 / 被新一次右键顶掉 / 窗口消失，四条路都会让线程自己结束。
+#[cfg(windows)]
+fn follow_cursor(hwnd: isize, generation: u64) {
+    let started = Instant::now();
+    let watchdog = right_watchdog_limit();
+    let (Some(origin_cursor), Some(start)) = (raw::cursor_pos(), sample(hwnd)) else {
+        desktop::trace("right-drag: start skipped (cursor or window unavailable)");
+        return;
+    };
+    // 偏移 = 光标屏幕坐标 − 窗口左上角（都是物理像素，同一个坐标系）。
+    // 整段拖动里这个差保持不变，窗口才会严格跟手，而不是越拖越偏。
+    let offset = (origin_cursor.0 - start.x, origin_cursor.1 - start.y);
+    let size = (start.width.max(1), start.height.max(1));
+    desktop::trace(&format!(
+        "right-drag: start hwnd=0x{hwnd:x} cursor=({},{}) rect={}x{}+{}+{} offset=({},{}) tick={}ms watchdog={:.0}s",
+        origin_cursor.0,
+        origin_cursor.1,
+        size.0,
+        size.1,
+        start.x,
+        start.y,
+        offset.0,
+        offset.1,
+        RIGHT_TICK.as_millis(),
+        watchdog.as_secs_f64()
+    ));
+
+    let mut last = (start.x, start.y);
+    let mut moves = 0u32;
+    let mut clamped = 0u32;
+    let mut worst = 0i32;
+    let reason = loop {
+        if RIGHT_GENERATION.load(Ordering::SeqCst) != generation {
+            break "superseded";
+        }
+        if started.elapsed() >= watchdog {
+            break "watchdog";
+        }
+        if !right_button_down() {
+            break "released";
+        }
+        if sample(hwnd).is_none() {
+            break "window-gone";
+        }
+        let Some(cursor) = raw::cursor_pos() else {
+            break "cursor-lost";
+        };
+        let left = cursor.0 - offset.0;
+        let top = cursor.1 - offset.1;
+        let mut target = raw::RECT {
+            left,
+            top,
+            right: left + size.0,
+            bottom: top + size.1,
+        };
+        // 先夹再落地：目标是"光标位置"也不行，工作区是硬边界（跨屏时取并集包围盒）。
+        if let Some(work) = allowed_region(&target) {
+            let shift = raw::clamp_rect(&mut target, &work);
+            if shift != 0 {
+                clamped += 1;
+                worst = worst.max(shift);
+                desktop::trace(&format!(
+                    "right-drag: clamp {shift}px rect={}x{}+{}+{} work={}x{}+{}+{}",
+                    target.right - target.left,
+                    target.bottom - target.top,
+                    target.left,
+                    target.top,
+                    work.right - work.left,
+                    work.bottom - work.top,
+                    work.left,
+                    work.top
+                ));
+            }
+        }
+        if (target.left, target.top) != last {
+            move_window(hwnd, target.left, target.top);
+            last = (target.left, target.top);
+            moves += 1;
+            desktop::trace(&format!(
+                "right-drag: move to=({},{}) cursor=({},{})",
+                target.left, target.top, cursor.0, cursor.1
+            ));
+        }
+        thread::sleep(RIGHT_TICK);
+    };
+    desktop::trace(&format!(
+        "right-drag: end reason={reason} after {}ms moves={moves} clamped={clamped} worst={worst}px final=({},{})",
+        started.elapsed().as_millis(),
+        last.0,
+        last.1
+    ));
+}
+
+#[cfg(not(windows))]
+fn follow_cursor(_hwnd: isize, _generation: u64) {}
+
 /// 装夹取：子类化窗口过程，拦 WM_MOVING。
 #[cfg(windows)]
 fn install_move_guard(hwnd: isize) -> Result<(), String> {
@@ -551,6 +691,18 @@ fn left_button_down() -> bool {
     false
 }
 
+/// 右键是否还按着：右键拖动同样收不到 pointerup（窗口在跟手动），这是唯一可靠的信源。
+#[cfg(windows)]
+fn right_button_down() -> bool {
+    const VK_RBUTTON: i32 = 0x02;
+    unsafe { (raw::GetAsyncKeyState(VK_RBUTTON) as u16 & 0x8000) != 0 }
+}
+
+#[cfg(not(windows))]
+fn right_button_down() -> bool {
+    false
+}
+
 #[cfg(windows)]
 fn sample(hwnd: isize) -> Option<Sample> {
     use raw::*;
@@ -614,6 +766,23 @@ mod raw {
         pub top: i32,
         pub right: i32,
         pub bottom: i32,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    pub struct POINT {
+        pub x: i32,
+        pub y: i32,
+    }
+
+    /// 当前光标屏幕坐标（物理像素）。取不到返回 None（绝不猜一个位置去推窗口）。
+    pub fn cursor_pos() -> Option<(i32, i32)> {
+        let mut point = POINT::default();
+        let ok = unsafe { GetCursorPos(&mut point) };
+        if ok == 0 {
+            return None;
+        }
+        Some((point.x, point.y))
     }
 
     #[repr(C)]
@@ -706,6 +875,7 @@ mod raw {
     #[link(name = "user32")]
     extern "system" {
         pub fn GetAsyncKeyState(vkey: i32) -> i16;
+        pub fn GetCursorPos(point: *mut POINT) -> i32;
         pub fn GetWindowRect(hwnd: *mut c_void, rect: *mut RECT) -> i32;
         pub fn IsWindow(hwnd: *mut c_void) -> i32;
         pub fn IsWindowVisible(hwnd: *mut c_void) -> i32;

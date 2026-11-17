@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isClickGesture } from "../theme/interaction";
 import {
   BOUNCE_DISTANCE,
   DEFAULT_EDGE_OPTIONS,
@@ -14,6 +15,10 @@ import {
   bounceEase,
   clampToWorkArea,
   edgeCompression,
+  followTarget,
+  isRightDragGesture,
+  RIGHT_BUTTON,
+  RIGHT_DRAG_THRESHOLD_PX,
   edgesFromPayload,
   isIdentity,
   proximityOf,
@@ -471,5 +476,113 @@ describe("bounceAway：松手弹走", () => {
       expect(delta).toBeLessThanOrEqual(lastStep + 1e-12);
       lastStep = delta;
     }
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * 右键拖动 = 精确摆放：手势判定 + 跟手目标位置
+ * ------------------------------------------------------------------ */
+
+/** 右键拖动的起点。 */
+const DOWN = { x: 100, y: 100, button: RIGHT_BUTTON };
+
+describe("edgePressure：右键拖动的手势判定", () => {
+  it("uses the same 4px line as the click gesture, and the line itself counts as a drag", () => {
+    expect(RIGHT_DRAG_THRESHOLD_PX).toBe(4);
+    // 不到 4px：还是"右键单击"，菜单照旧。
+    expect(isRightDragGesture(DOWN, { x: 103.5, y: 100, buttons: RIGHT_BUTTON })).toBe(false);
+    expect(isRightDragGesture(DOWN, { x: 100, y: 96.5, buttons: RIGHT_BUTTON })).toBe(false);
+    // 恰好 4px：算拖动（与 isClickGesture 的 < 4px 严丝合缝，中间不留缝）。
+    expect(isRightDragGesture(DOWN, { x: 104, y: 100, buttons: RIGHT_BUTTON })).toBe(true);
+    expect(isRightDragGesture(DOWN, { x: 100, y: 96, buttons: RIGHT_BUTTON })).toBe(true);
+    // 斜着走：3px+3px 的欧氏距离已经是 4.24px，早该算拖动。
+    expect(isRightDragGesture(DOWN, { x: 103, y: 103, buttons: RIGHT_BUTTON })).toBe(true);
+    expect(isRightDragGesture(DOWN, { x: 102, y: 102, buttons: RIGHT_BUTTON })).toBe(false);
+  });
+
+  it("only reacts to the right button", () => {
+    // 起点就是左键：与右键拖动无关。
+    expect(isRightDragGesture({ x: 100, y: 100, button: 0 }, { x: 200, y: 100, buttons: RIGHT_BUTTON })).toBe(false);
+    // 移动过程中右键已经松开（或压根是左键）：不判拖动。
+    expect(isRightDragGesture(DOWN, { x: 200, y: 100, buttons: 1 })).toBe(false);
+    expect(isRightDragGesture(DOWN, { x: 200, y: 100, buttons: 0 })).toBe(false);
+    // 左右键同时按着：右键还在，照样拖动。
+    expect(isRightDragGesture(DOWN, { x: 200, y: 100, buttons: 3 })).toBe(true);
+    // 只给坐标（测试里手写的简化事件）：不因为"没给按钮"就一律判否。
+    expect(isRightDragGesture({ x: 0, y: 0 }, { x: 40, y: 0 })).toBe(true);
+  });
+
+  it("never fires on non-finite coordinates", () => {
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      expect(isRightDragGesture({ x: bad, y: 0, button: RIGHT_BUTTON }, { x: 50, y: 0, buttons: RIGHT_BUTTON })).toBe(false);
+      expect(isRightDragGesture(DOWN, { x: bad, y: 0, buttons: RIGHT_BUTTON })).toBe(false);
+      expect(isRightDragGesture(DOWN, { x: 0, y: bad, buttons: RIGHT_BUTTON })).toBe(false);
+    }
+  });
+
+  it("is the exact complement of the click gesture (both can never be true at once)", () => {
+    const offsets = [-9, -5, -4.5, -4, -3.999, -2, 0, 2, 3.999, 4, 4.5, 5, 9];
+    for (const dx of offsets) {
+      for (const dy of offsets) {
+        const down = { x: 50, y: 50, t: 1000 };
+        const up = { x: 50 + dx, y: 50 + dy, t: 1000 };
+        const click = isClickGesture(down, up);
+        const drag = isRightDragGesture({ ...down, button: RIGHT_BUTTON }, { x: up.x, y: up.y, buttons: RIGHT_BUTTON });
+        expect(click && drag).toBe(false);
+        expect(click || drag).toBe(true);
+        expect(drag).toBe(!click);
+      }
+    }
+  });
+});
+
+describe("edgePressure：右键跟手的目标位置", () => {
+  const WORK = { x: 0, y: 0, width: 1920, height: 1032 };
+  const CARD = { width: 280, height: 96 };
+  // 抓在卡片正中间：偏移 (140, 48)，于是光标在哪窗口左上角就在"光标 − (140, 48)"。
+  const OFFSET = { x: 140, y: 48 };
+
+  it("follows the cursor exactly while everything is on screen", () => {
+    const target = followTarget({ x: 1000, y: 500 }, OFFSET, WORK, CARD);
+    expect(target).toEqual({ x: 860, y: 452 });
+    // 偏移不参与"夹取"以外任何折算：再挪一格，位移与光标位移一比一。
+    expect(followTarget({ x: 1001, y: 501 }, OFFSET, WORK, CARD)).toEqual({ x: 861, y: 453 });
+  });
+
+  it("clamps back on all four edges", () => {
+    // 左 / 上：光标越出工作区，窗口左上角停在 (0, 0) —— 这就是"能贴住边缘不弹走"的位置。
+    expect(followTarget({ x: -500, y: -500 }, OFFSET, WORK, CARD)).toEqual({ x: 0, y: 0 });
+    // 右：右边界正好压在 1920 上。
+    expect(followTarget({ x: 5000, y: 500 }, OFFSET, WORK, CARD)).toEqual({ x: WORK.width - CARD.width, y: 452 });
+    // 下：下边界正好压在 1032 上。
+    expect(followTarget({ x: 1000, y: 5000 }, OFFSET, WORK, CARD)).toEqual({ x: 860, y: WORK.height - CARD.height });
+    // 右下角：两轴同时夹住，窗口整个还在工作区里。
+    const corner = followTarget({ x: 9999, y: 9999 }, OFFSET, WORK, CARD);
+    expect(corner).toEqual({ x: WORK.width - CARD.width, y: WORK.height - CARD.height });
+  });
+
+  it("puts a window bigger than the work area at its top-left corner", () => {
+    const huge = { width: 4000, height: 3000 };
+    expect(followTarget({ x: 800, y: 600 }, OFFSET, WORK, huge)).toEqual({ x: 0, y: 0 });
+    expect(followTarget({ x: -800, y: -600 }, OFFSET, WORK, huge)).toEqual({ x: 0, y: 0 });
+  });
+
+  it("handles a negative-coordinate work area (secondary monitor on the left)", () => {
+    const area = { x: -1920, y: -200, width: 1920, height: 1080 };
+    // 屏内：照常跟手。
+    expect(followTarget({ x: -1000, y: 400 }, OFFSET, area, CARD)).toEqual({ x: -1140, y: 352 });
+    // 越到主屏那一侧（x > 0）：夹回副屏右边界。
+    expect(followTarget({ x: 500, y: 400 }, OFFSET, area, CARD)).toEqual({ x: -CARD.width, y: 352 });
+    // 越过副屏左边：夹回 x = -1920。
+    expect(followTarget({ x: -9000, y: 400 }, OFFSET, area, CARD)).toEqual({ x: area.x, y: 352 });
+    // 上边界是 -200：光标再往上也不许出界。
+    expect(followTarget({ x: -1000, y: -9000 }, OFFSET, area, CARD)).toEqual({ x: -1140, y: area.y });
+  });
+
+  it("treats broken numbers as 'clamp to the top-left corner', never as NaN", () => {
+    const broken = followTarget({ x: NaN, y: Infinity }, OFFSET, WORK, CARD);
+    expect(Number.isFinite(broken.x)).toBe(true);
+    expect(Number.isFinite(broken.y)).toBe(true);
+    expect(broken).toEqual({ x: 0, y: 0 });
   });
 });

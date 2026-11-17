@@ -35,6 +35,11 @@ function prefersReducedMotion(): boolean {
 export interface EdgePressureHandle {
   /** 发起拖动之前调一次：Rust 侧起观察线程，替 webview 盯着位置和松手。 */
   begin(): void;
+  /**
+   * 立刻结束观察（右键按下 / 右键拖动开始时调）：让左键那条通道彻底让位，
+   * 保证同一时刻只有一条线程在推动窗口。形变与回弹一并归位。
+   */
+  cancel(): void;
 }
 
 /**
@@ -174,7 +179,13 @@ export function useEdgePressure(barRef: RefObject<HTMLElement | null>): EdgePres
         // 减弱动效：只关掉"窗口被弹走"，形变回弹那边另有自己的判定。
         beginEdgeWatch({ bounce: !prefersReducedMotion() });
       },
+      cancel() {
+        // 代次 +1：观察线程下一个 tick 就退出，且它是"被顶掉"路线 —— 不发 bar:edge-end，不会弹走。
+        endEdgeWatch();
+        cancelRebound();
+        clear(barRef.current);
+      },
     }),
-    [],
+    [barRef, cancelRebound, clear],
   );
 }

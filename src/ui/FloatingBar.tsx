@@ -17,7 +17,7 @@ import {
   type DigitColumns,
 } from "../core/format";
 import { DEFAULT_INPUT, type DisplayMode, type RefreshHz } from "../core/settings";
-import { invoke, startDragging } from "../settings/bridge";
+import { beginRightDrag, invoke, startDragging } from "../settings/bridge";
 import { CELEBRATION_STEP, crossedMultiple } from "../theme/celebration";
 import {
   counterLine,
@@ -48,6 +48,7 @@ import { useAdaptiveCardWidth } from "../theme/adaptiveWidth";
 import type { Theme } from "../theme/types";
 import { useMascot } from "../theme/useMascot";
 import { BubbleChannel, type BubbleKind, type BubbleMessage } from "./ClickFeedback";
+import { isRightDragGesture } from "./edgePressure";
 import { useEdgePressure } from "./useEdgePressure";
 import { DigitCell, FracCell, type DigitCellHandle, type FracCellHandle } from "./RollingDigit";
 import { startTicker } from "./ticker";
@@ -222,9 +223,50 @@ export function FloatingBar({
   const adaptive = useAdaptiveCardWidth(isPhotoLeft, { bar: barRef, main: mainRef });
   const adaptiveNote = adaptive.note;
 
+  /*
+   * 右键的两种含义（同一次手势只能是一种）：
+   * - 按下后没动（位移 < 4px）：右键单击 ⇒ 原来的原生上下文菜单，行为一字不改；
+   * - 按下后位移越过 4px：右键拖动 ⇒ 精确摆放，不挤压、不弹走，只把窗口摆到你想放的地方。
+   * 两个 ref 是这件事的全部状态：rightPress 记起点，rightDragging 记"这次已经是拖动"。
+   */
+  const rightPressRef = useRef<{ x: number; y: number } | null>(null);
+  /**
+   * 这次右键手势已经判定为拖动。
+   *
+   * 它一直保持到下一次右键按下为止，而不是在 pointerup / contextmenu 里清掉：真机实测
+   * Windows 的 contextmenu 是在 pointerup 之后补发的（pointerdown → pointermove… →
+   * pointerup → mouseup → contextmenu），而且松手时可能补发不止一次。清得太早，
+   * 补发的那一次就会把菜单弹出来 —— 这正是"右键拖完弹出一个菜单"的成因。
+   */
+  const rightDraggingRef = useRef(false);
+
+  /**
+   * 右键按下的公共记账。
+   *
+   * 为什么有两入口：pointerdown 与 mousedown 都会走到这里。**左键已经按着的时候再按右键，
+   * 浏览器不会发第二个 pointerdown**（同一个指针只做一次 down，之后只更新 buttons 位），
+   * 只发一个 mousedown。两条都收，才能保证"右键按下 ⇒ 左键观察线程先停"没有死角。
+   */
+  const noteRightPress = (x: number, y: number) => {
+    if (rightPressRef.current !== null) return; // pointerdown 已经记过，别被同一个按下重置
+    rightPressRef.current = { x, y };
+    rightDraggingRef.current = false;
+    // 右键优先：左键观察线程若还在跑，先让它停 —— 两条跟手通道绝不同时推动同一个窗口。
+    edgePressure.cancel();
+    pressRef.current = null;
+  };
+
+  /** mousedown 兜底：只有"别的键已经按着时又按下右键"这一种情况到这里（见 noteRightPress）。 */
+  const handleMouseDown = (event: { button: number; clientX: number; clientY: number }) => {
+    if (event.button !== 2) return;
+    noteRightPress(event.clientX, event.clientY);
+  };
+
   const handleContextMenu = (event: { preventDefault(): void }) => {
     // 关掉 WebView2 默认右键菜单，换成 Rust 侧弹出的原生菜单。
     event.preventDefault();
+    // 右键拖动期间 / 紧随其后的补发：一个 contextmenu 都不许弹出菜单。
+    if (rightDraggingRef.current) return;
     void invoke("show_bar_menu");
   };
 
@@ -321,7 +363,12 @@ export function FloatingBar({
   }, [showBubble]);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return; // 只认左键
+    if (event.button === 2) {
+      // 右键：只记起点。位移越过 4px 才算拖动（见 handlePointerMove），否则按原来的菜单路径走。
+      noteRightPress(event.clientX, event.clientY);
+      return;
+    }
+    if (event.button !== 0) return; // 其余按键不参与手势
     draggingRef.current = false;
     pressRef.current = null;
     if (isInteractiveTarget(event.target)) return; // × 自己处理点击
@@ -329,6 +376,24 @@ export function FloatingBar({
   };
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const rightDown = rightPressRef.current;
+    if (rightDown !== null) {
+      if ((event.buttons & 2) === 0) {
+        rightPressRef.current = null; // 松开事件丢了：这次手势作废，绝不猜。
+        return;
+      }
+      if (rightDraggingRef.current) return;
+      if (!isRightDragGesture(rightDown, { x: event.clientX, y: event.clientY, buttons: event.buttons })) {
+        return;
+      }
+      // 越过 4px：这次右键变成「精确摆放」。跟手完全由 Rust 线程做（webview 收不到后续 pointerup），
+      // 这里只负责发起一次，绝不重复发起（rightDraggingRef 挡住后续每一个 pointermove）。
+      rightDraggingRef.current = true;
+      rightPressRef.current = null;
+      edgePressure.cancel();
+      beginRightDrag();
+      return;
+    }
     const down = pressRef.current;
     if (down === null || draggingRef.current) return;
     if ((event.buttons & 1) === 0) {
@@ -345,6 +410,12 @@ export function FloatingBar({
   };
 
   const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button === 2) {
+      // 拖过的话这里刻意**不清** rightDraggingRef：紧随其后的 contextmenu 必须继续被吞掉。
+      // 下一次右键按下时才重置，所以"这一整次右键"都不会弹菜单。
+      rightPressRef.current = null;
+      return;
+    }
     const down = pressRef.current;
     pressRef.current = null;
     if (down === null || draggingRef.current || event.button !== 0) return;
@@ -355,6 +426,8 @@ export function FloatingBar({
   const handlePointerCancel = () => {
     pressRef.current = null;
     draggingRef.current = false;
+    rightPressRef.current = null;
+    rightDraggingRef.current = false;
   };
 
   // a / b 交替：同一个 animation-name 无法重复播放，换个名字就是重播（同一次点击只改一次属性）。
@@ -368,6 +441,7 @@ export function FloatingBar({
     onPointerMove: handlePointerMove,
     onPointerUp: handlePointerUp,
     onPointerCancel: handlePointerCancel,
+    onMouseDown: handleMouseDown,
     onContextMenu: handleContextMenu,
   };
 
@@ -437,7 +511,8 @@ export function FloatingBar({
         // 庆祝弹窗：同一份整数文本，跨过 20 元台阶时弹一次。
         notifyCelebration(money.int);
         // 自适应宽度：只在整数位数变化（并稳定若干帧）时才下发一次窗口尺寸。
-        adaptiveNote(money.int);
+        // 右键拖动期间一律不动窗口尺寸：那一段只有位置在变，宽度重算会把跟手的手感搅乱。
+        if (!rightDraggingRef.current) adaptiveNote(money.int);
         // 底部时间轴：纯几何，只写圆点的 style.left 与两个 data-*（值没变就不碰 DOM）。
         const geometry = timelineGeometry(settings, nowMs);
         if (dotRef.current) dotRef.current.style.left = `${(geometry.progress * 100).toFixed(2)}%`;
