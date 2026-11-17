@@ -4,10 +4,11 @@ import {
   useImperativeHandle,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type Ref,
 } from "react";
-import type { Settings } from "../core/earning";
+import type { Phase, Settings } from "../core/earning";
 import {
   DEFAULT_DECIMALS,
   formatMicro,
@@ -30,13 +31,23 @@ import {
   type PointerMoment,
 } from "../theme/interaction";
 import { integerYuanOf } from "../theme/mascot";
+import {
+  defaultNotifyStore,
+  markInteraction,
+  markSent,
+  pickProactiveMessage,
+  readNotifyState,
+  sentIdsOn,
+  writeNotifyState,
+} from "../theme/proactive";
+import { lunchRatiosOf, timelineGeometry } from "../theme/timeline";
 import { MascotImage } from "../theme/MascotImage";
 import { PhotoArt } from "../theme/PhotoArt";
 import { layoutOf } from "../theme/layout";
 import { useAdaptiveCardWidth } from "../theme/adaptiveWidth";
 import type { Theme } from "../theme/types";
 import { useMascot } from "../theme/useMascot";
-import { ClickFeedback } from "./ClickFeedback";
+import { BubbleChannel, type BubbleKind, type BubbleMessage } from "./ClickFeedback";
 import { useEdgePressure } from "./useEdgePressure";
 import { DigitCell, FracCell, type DigitCellHandle, type FracCellHandle } from "./RollingDigit";
 import { startTicker } from "./ticker";
@@ -46,6 +57,12 @@ import { startTicker } from "./ticker";
  * 前导零的格子由 DigitCell 收起（display: none），所以池子固定也不会显示多余的空位。
  */
 const INT_SLOTS = 12;
+
+/** 气泡显示时长：与 styles.css 的 click-bubble 动画时长一致（1200ms）。 */
+const BUBBLE_MS = 1200;
+
+/** 主动消息的判定节拍：每帧都算太浪费，1 秒一次足够追上任何"时刻"。 */
+const PROACTIVE_CHECK_MS = 1000;
 
 /** 手势时长用单调时钟：Date.now() 会被系统对时回拨，performance.now() 不会。 */
 function gestureClock(): number {
@@ -148,6 +165,11 @@ function RollingFrac({ decimals, ref }: RollingFracProps) {
   );
 }
 
+/** 气泡槽里的一条：气泡消息本身 + 它对应的果冻帧号（只有点击会推进，见 showBubble）。 */
+interface BubbleSlot extends BubbleMessage {
+  fx: number;
+}
+
 interface FloatingBarProps {
   settings: Settings;
   decimals?: Decimals;
@@ -219,26 +241,83 @@ export function FloatingBar({
    * data-fx="a|b"，CSS 换一个 animation-name 就是重播一遍动画：没有逐帧 setState，
    * 也没有「到点再 setState 收起气泡」（淡出由 keyframes 的 fill 收尾）。
    */
-  const [feedback, setFeedback] = useState<{ token: number; text: string } | null>(null);
+  const [bubble, setBubble] = useState<BubbleSlot | null>(null);
   const tokenRef = useRef(0);
+  // 果冻形变的帧号：只有点击推进它。猫自己说话时不抖卡片，点击-形变的一一对应也就不受影响。
+  const fxRef = useRef(0);
   const pressRef = useRef<PointerMoment | null>(null);
   const draggingRef = useRef(false);
+  /*
+   * 气泡槽（唯一一条）：点击吐槽与主动气泡共用它。
+   * bubbleBusyUntil 是当前那条的占用截止时刻（单调时钟，与 CSS 动画同一个 1200ms）；
+   * 主动消息撞上正在播的气泡时排队等它播完，绝不两条叠在一起。
+   */
+  const bubbleBusyUntilRef = useRef(0);
+  const pendingBubbleRef = useRef<string | null>(null);
+  const pendingTimerRef = useRef<number | null>(null);
+  // 底部时间轴：只写 dot 的 style.left 与两个 data-*，一帧都没有 setState。
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const dotRef = useRef<HTMLSpanElement>(null);
+  const timelineMarkRef = useRef("");
+  // 主动气泡的判定基线：checkedAt 是上一次判定的时刻（null = 刚启动，这一轮只建立基线）。
+  const proactiveRef = useRef<{ checkedAt: number | null; interactionAt: number | null | undefined }>({
+    checkedAt: null,
+    interactionAt: undefined,
+  });
+
+  const showBubble = useCallback((text: string, kind: BubbleKind) => {
+    tokenRef.current += 1;
+    if (kind === "click") fxRef.current += 1;
+    bubbleBusyUntilRef.current = gestureClock() + BUBBLE_MS;
+    setBubble({ token: tokenRef.current, text, kind, fx: fxRef.current });
+  }, []);
+
+  /**
+   * 主动消息专用入口：气泡槽被占着就排队（单槽，后来的覆盖先来的），等当前那条播完再接上。
+   * 选"排队"而不是"丢弃"：每条消息每天只有一次机会，丢掉就真的永远看不到了。
+   */
+  const sayWhenFree = useCallback(
+    (text: string) => {
+      const wait = bubbleBusyUntilRef.current - gestureClock();
+      if (wait <= 0) {
+        showBubble(text, "proactive");
+        return;
+      }
+      pendingBubbleRef.current = text;
+      if (pendingTimerRef.current !== null) return;
+      pendingTimerRef.current = window.setTimeout(() => {
+        pendingTimerRef.current = null;
+        const pending = pendingBubbleRef.current;
+        pendingBubbleRef.current = null;
+        if (pending !== null) showBubble(pending, "proactive");
+      }, wait);
+    },
+    [showBubble],
+  );
+
+  useEffect(
+    () => () => {
+      if (pendingTimerRef.current !== null) window.clearTimeout(pendingTimerRef.current);
+    },
+    [],
+  );
 
   const runInteraction = useCallback(() => {
     // 计数：读 → 加一 → 写回。独立存储键（workenergy.interactions.v1），不污染 settings。
-    const day = dayKey(Date.now());
+    const at = Date.now();
+    const day = dayKey(at);
     const store = defaultInteractionStore();
     const { state, milestone } = registerClick(readInteractionState(store), day);
     writeInteractionState(store, state);
-    tokenRef.current += 1;
-    setFeedback({
-      token: tokenRef.current,
-      // 每 5 次把计数写进气泡，其余次数冒一句吐槽。
-      text: counterLine(state.today) ?? pickPhrase(Math.random()),
-    });
+    // 点击也算"互动"：把主动气泡的计时一起推到现在（独立存储键 workenergy.notify.v1）。
+    const notifyStore = defaultNotifyStore();
+    writeNotifyState(notifyStore, markInteraction(readNotifyState(notifyStore), at));
+    proactiveRef.current.interactionAt = at;
+    // 每 5 次把计数写进气泡，其余次数冒一句吐槽；点击永远立刻显示（主动消息只有排队的份）。
+    showBubble(counterLine(state.today) ?? pickPhrase(Math.random()), "click");
     // 里程碑：复用现有的庆祝弹窗命令，每个档位只弹一次（已弹过的档位持久化在同一个键里）。
     if (milestone !== null) void invoke("show_celebration");
-  }, []);
+  }, [showBubble]);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return; // 只认左键
@@ -278,9 +357,8 @@ export function FloatingBar({
   };
 
   // a / b 交替：同一个 animation-name 无法重复播放，换个名字就是重播（同一次点击只改一次属性）。
-  const fx = feedback === null ? null : feedback.token % 2 === 0 ? "b" : "a";
-  // 气泡：key = token，换 key 即重挂载 -> CSS keyframes 从头播一遍。
-  const bubble = feedback === null ? null : <ClickFeedback key={feedback.token} text={feedback.text} />;
+  // fx === 0 说明这次不是点击（或还没点过）：不发任何形变，data-fx 保持原样。
+  const fx = bubble === null || bubble.fx === 0 ? null : bubble.fx % 2 === 0 ? "b" : "a";
   // 手势全部挂在最外层（整块卡片 + 透明边距），两种版式共用同一份判定。
   const barHostProps = {
     className: "bar-host",
@@ -291,6 +369,37 @@ export function FloatingBar({
     onPointerCancel: handlePointerCancel,
     onContextMenu: handleContextMenu,
   };
+
+  /*
+   * 主动气泡的判定（每秒最多一次，全部由注入的时刻推算，没有写死的钟点）：
+   * - 第一次只建立基线，启动时绝不补发今天已经过去的时刻；
+   * - 命中就记进 workenergy.notify.v1（该条今天不再发），并把"上次互动"推到这一刻；
+   * - 气泡槽被点击吐槽占着时排队，等它播完再说，两条永不叠在一起。
+   */
+  const noteProactive = useCallback(
+    (phase: Phase, nowMs: number) => {
+      const state = proactiveRef.current;
+      if (state.checkedAt !== null && nowMs - state.checkedAt < PROACTIVE_CHECK_MS) return;
+      const store = defaultNotifyStore();
+      const stored = readNotifyState(store);
+      if (state.interactionAt === undefined) state.interactionAt = stored.lastInteractionAt;
+      const day = dayKey(nowMs);
+      const message = pickProactiveMessage({
+        settings,
+        now: nowMs,
+        phase,
+        lastInteractionAt: state.interactionAt,
+        sent: sentIdsOn(stored, day),
+        checkedAt: state.checkedAt,
+      });
+      state.checkedAt = nowMs;
+      if (message === null) return;
+      writeNotifyState(store, markSent(stored, day, message.id, nowMs));
+      state.interactionAt = nowMs;
+      sayWhenFree(message.text);
+    },
+    [settings, sayWhenFree],
+  );
 
   useEffect(() => {
     const host = {
@@ -324,10 +433,36 @@ export function FloatingBar({
         notifyCelebration(money.int);
         // 自适应宽度：只在整数位数变化（并稳定若干帧）时才下发一次窗口尺寸。
         adaptiveNote(money.int);
+        // 底部时间轴：纯几何，只写圆点的 style.left 与两个 data-*（值没变就不碰 DOM）。
+        const geometry = timelineGeometry(settings, nowMs);
+        if (dotRef.current) dotRef.current.style.left = `${(geometry.progress * 100).toFixed(2)}%`;
+        const timeline = timelineRef.current;
+        if (timeline !== null) {
+          const overtime = phase === "加班";
+          const mark = `${geometry.state}:${overtime ? "1" : "0"}`;
+          if (timelineMarkRef.current !== mark) {
+            timelineMarkRef.current = mark;
+            timeline.dataset.state = geometry.state;
+            if (overtime) timeline.dataset.overtime = "true";
+            else delete timeline.dataset.overtime;
+          }
+        }
+        // 主动气泡：每秒一次判定，用的就是这一帧的阶段与时刻（与阶段文字同源，不会自相矛盾）。
+        noteProactive(phase, nowMs);
       },
       { refreshHz, decimals, displayMode },
     );
-  }, [settings, decimals, refreshHz, displayMode, now, mascotNotify, adaptiveNote, notifyCelebration]);
+  }, [
+    settings,
+    decimals,
+    refreshHz,
+    displayMode,
+    now,
+    mascotNotify,
+    adaptiveNote,
+    notifyCelebration,
+    noteProactive,
+  ]);
 
   // 两个版式共用的两块：数字区与阶段文字（滚轮 / ticker / 每帧 paint 一行都没动）。
   const valueBlock = (
@@ -366,6 +501,26 @@ export function FloatingBar({
   );
 
   /*
+   * 底部时间轴：绝对定位的 3px 细线（不参与任何布局 ⇒ 卡片高度一个像素都不会变，
+   * 圆点也不会挤掉任何一行字）。轨道上的午休缺口由两个 CSS 变量描述（几何一算好就写进 style，
+   * 不随帧变化），圆点位置每帧由 ticker 直接写 style.left。
+   */
+  const lunchGap = lunchRatiosOf(settings);
+  const timelineStyle =
+    lunchGap === null
+      ? undefined
+      : ({
+          "--lunch-from": `${(lunchGap.from * 100).toFixed(3)}%`,
+          "--lunch-to": `${(lunchGap.to * 100).toFixed(3)}%`,
+        } as CSSProperties);
+  const timelineBlock = (
+    <div className="bar-timeline" ref={timelineRef} style={timelineStyle} data-state="working" aria-hidden="true">
+      <span className="bar-timeline-rail" />
+      <span className="bar-timeline-dot" ref={dotRef} />
+    </div>
+  );
+
+  /*
    * 外层 .bar-host 是手势与动画的锚点：
    * - 手势（按下/移动/松开、右键）都挂在这里，两种版式共用同一份判定；
    * - data-fx=a|b 只负责"重播一遍动画"（换 animation-name），不携带任何样式；
@@ -384,8 +539,9 @@ export function FloatingBar({
             {valueBlock}
             <div className="bar-foot">{phaseBlock}</div>
           </div>
+          {timelineBlock}
         </div>
-        {bubble}
+        <BubbleChannel bubble={bubble} />
       </div>
     );
   }
@@ -405,8 +561,9 @@ export function FloatingBar({
             <MascotImage theme={theme} state={mascot.state} />
           </div>
         </div>
+        {timelineBlock}
       </div>
-      {bubble}
+      <BubbleChannel bubble={bubble} />
     </div>
   );
 }

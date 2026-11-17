@@ -551,6 +551,125 @@ body {
 
 /*
  * ---------------------------------------------------------------------------
+ * 底部时间轴（今天的时间轴，纯 CSS：没有图片、没有字体、没有新依赖）
+ *
+ * 结构：.bar 的最后一个子节点，position: absolute —— 完全不参与布局，
+ * 所以卡片高度一个像素都不会变，也挤不掉现有的任何一行字。
+ * 视觉高度 3px（规范要求 2-3px）：1px 轨道（午休处留一段浅色缺口）+ 3px 圆点。
+ * 颜色全部取主题变量（轨道 --theme-hint、圆点 --theme-int），深色 / 极简 / 耄耋猫
+ * 三套主题都不用额外配置，宽度铺满卡片内容区（.bar 的水平内边距之内 = 100%）。
+ *
+ * 四种状态：before（未上班，整体弱化）/ working（在岗，圆点匀速右移）/
+ * lunch（午休中，圆点落在缺口里）/ after（已下班，圆点停在右端并弱化）。
+ * 加班不往右延伸（窗口紧贴卡片，延伸必被裁切），它的复用 after + data-overtime 换暖色。
+ * ---------------------------------------------------------------------------
+ */
+.bar-timeline {
+  position: absolute;
+  z-index: 2;
+  left: calc(22px * var(--bar-scale));
+  right: calc(22px * var(--bar-scale));
+  bottom: calc(6px * var(--bar-scale));
+  height: 3px;
+  pointer-events: none;
+}
+
+/* 午休那段"浅色缺口"：一层很淡的底色块（缺口本身是轨道在那里断开）。 */
+.bar-timeline::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--lunch-from, 0%);
+  width: calc(var(--lunch-to, 0%) - var(--lunch-from, 0%));
+  border-radius: 1px;
+  background: var(--theme-label, rgba(226, 232, 240, 0.55));
+  opacity: 0.14;
+}
+
+/* 轨道：2px 细线（整个时间轴的视觉高度仍是 3px）；午休缺口用同一段渐变"挖掉"
+   （--lunch-from / --lunch-to 由 React 写进 style，午休关闭时两者都是 0%，缺口自然消失）。 */
+.bar-timeline-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 1px;
+  height: 2px;
+  border-radius: 1px;
+  opacity: 0.5;
+  background-image: linear-gradient(
+    to right,
+    var(--theme-hint, rgba(226, 232, 240, 0.45)) 0 var(--lunch-from, 0%),
+    transparent var(--lunch-from, 0%) var(--lunch-to, 0%),
+    var(--theme-hint, rgba(226, 232, 240, 0.45)) var(--lunch-to, 0%) 100%
+  );
+}
+
+/* 当前位置：3px 圆点，居中压在轨道上（margin-left 抵掉自身一半宽度）。 */
+.bar-timeline-dot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 3px;
+  margin-left: -1.5px;
+  border-radius: 999px;
+  background: var(--theme-int, #f2f4f8);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.16);
+}
+
+/*
+ * 未上班：线条再弱一档（圆点停在最左端）。
+ * 只弱化线，不弱化整个时间轴：圆点是"现在在哪"的标记，压暗它等于把信息也压掉了。
+ */
+.bar-timeline[data-state="before"] .bar-timeline-rail {
+  opacity: 0.3;
+}
+
+.bar-timeline[data-state="before"]::before {
+  opacity: 0.09;
+}
+
+.bar-timeline[data-state="before"] .bar-timeline-dot {
+  opacity: 0.75;
+}
+
+/* 已下班：圆点停在右端，线条转为弱化色，圆点换成强调色继续标记终点。 */
+.bar-timeline[data-state="after"] .bar-timeline-rail {
+  opacity: 0.28;
+}
+
+.bar-timeline[data-state="after"]::before {
+  opacity: 0.08;
+}
+
+.bar-timeline[data-state="after"] .bar-timeline-dot {
+  background: var(--theme-frac, rgba(160, 220, 255, 0.92));
+}
+
+/* 加班：换暖色并恢复不透明度（唯一的"加班"视觉差异，不占额外宽度）。 */
+.bar-timeline[data-overtime="true"] .bar-timeline-rail {
+  background-image: none;
+  background-color: #ffb454;
+  opacity: 0.8;
+}
+
+.bar-timeline[data-overtime="true"] .bar-timeline-dot {
+  background: #ffb454;
+}
+
+/*
+ * photo-left：那条 96px 的猫图在左边，时间轴贴到右侧文字区里（左侧留出图的宽度），
+ * 既不压到猫脸上，也不影响自适应宽度测量（绝对定位不参与内在宽度）。
+ */
+.bar[data-layout="photo-left"] .bar-timeline {
+  left: 90px;
+  right: 10px;
+  bottom: 5px;
+}
+
+/*
+ * ---------------------------------------------------------------------------
  * 左键点击互动（零新增素材）
  *
  * 结构：.bar-host（手势锚点，铺满窗口）> .bar（卡片本体，果冻形变作用在这一层）

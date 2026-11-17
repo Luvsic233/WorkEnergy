@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { parseSettings } from "../core/earning";
+import { parseSettings, type Settings } from "../core/earning";
 import { builtinTheme, MAODIE_THEME_ID } from "../theme/builtin";
 import type { Theme } from "../theme/types";
 import { FloatingBar } from "./FloatingBar";
@@ -11,6 +11,11 @@ const settings = parseSettings({ salary: "10000" });
 /** 服务端渲染：悬浮条本身是纯展示 + ref 逐帧绘制，SSR 足够断言 DOM 结构（effect 不跑）。 */
 function render(theme: Theme | null, decimals: 18 | 12 | 6 = 18): string {
   return renderToStaticMarkup(createElement(FloatingBar, { settings, decimals, theme }));
+}
+
+/** 换一份设置（例如关掉午休）时用的同一个渲染入口。 */
+function renderWith(custom: Settings, theme: Theme | null = null): string {
+  return renderToStaticMarkup(createElement(FloatingBar, { settings: custom, decimals: 18, theme }));
 }
 
 const maodie = builtinTheme(MAODIE_THEME_ID) ?? null;
@@ -111,5 +116,47 @@ describe("FloatingBar：photo-left 版式（内置耄耋猫）", () => {
     const html = render(maodie, 18);
     expect(html).not.toContain("bar-bubble");
     expect(html).not.toContain("data-fx");
+  });
+});
+
+describe("FloatingBar：底部时间轴（两个版式都有，纯 CSS 零素材）", () => {
+  it("draws the timeline inside the classic bar, after the foot text", () => {
+    const html = render(classic);
+
+    expect(html).toContain('class="bar-timeline"');
+    expect(html).toContain("bar-timeline-rail");
+    expect(html).toContain("bar-timeline-dot");
+    // 绝对定位的兄弟节点：排在脚注之后（不参与布局，撑不高卡片）
+    expect(html.indexOf('class="bar-foot"')).toBeLessThan(html.indexOf('class="bar-timeline"'));
+    // 午休缺口：09:00-18:00 里的 12:00-13:00 → 33.333% .. 44.444%
+    expect(html).toContain("--lunch-from:33.333%");
+    expect(html).toContain("--lunch-to:44.444%");
+    // 零素材：没有任何图片 / 图标 / 自定义字体
+    expect(html).not.toContain("<svg");
+    expect(/class="bar-timeline"[\s\S]*<img/.test(html)).toBe(false);
+  });
+
+  it("draws the timeline inside the photo-left bar too", () => {
+    const html = render(maodie, 18);
+
+    expect(html).toContain('class="bar-timeline"');
+    expect(html).toContain("bar-timeline-rail");
+    expect(html).toContain("bar-timeline-dot");
+    expect(html.indexOf('class="bar-photo-main"')).toBeLessThan(html.indexOf('class="bar-timeline"'));
+  });
+
+  it("drops the lunch gap when lunch is turned off, and stays a full line", () => {
+    const html = renderWith({ ...settings, lunchStartMin: null, lunchEndMin: null }, classic);
+
+    expect(html).toContain('class="bar-timeline"');
+    expect(html).not.toContain("--lunch-from");
+    expect(html).not.toContain("--lunch-to");
+  });
+
+  it("starts in the working state and carries no text", () => {
+    const html = render(classic);
+    expect(html).toContain('data-state="working"');
+    // 时间轴只画线：它不带任何可读文本（aria-hidden，也不进无障碍树）
+    expect(/class="bar-timeline"[\s\S]*aria-hidden|aria-hidden="true"[^>]*class="bar-timeline"/.test(html)).toBe(true);
   });
 });
