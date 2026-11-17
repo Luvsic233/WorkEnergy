@@ -75,3 +75,21 @@ export function timelineGeometry(settings: Settings, now: number): TimelineGeome
   if (inLunch) return { progress, lunchStartRatio, lunchEndRatio, state: "lunch" };
   return { progress, lunchStartRatio, lunchEndRatio, state: "working" };
 }
+
+/**
+ * 阶段文字后面那截「剩 3:12」：时间轴只有一条线，光看几何不容易懂，
+ * 这行字把它解释清楚。只在「还没下班」（在岗 / 午休）时给，其余返回 null。
+ */
+export function remainingLabel(settings: Settings, now: number): string | null {
+  const geometry = timelineGeometry(settings, now);
+  if (geometry.state !== "working" && geometry.state !== "lunch") return null;
+  const nowMs = msOfDay(now);
+  if (!Number.isFinite(nowMs)) return null;
+  const leftMs = settings.workEndMin * MINUTE_MS - nowMs;
+  if (!Number.isFinite(leftMs) || leftMs <= 0) return null;
+  const totalMinutes = Math.ceil(leftMs / MINUTE_MS);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours <= 0) return `剩 ${minutes} 分`;
+  return `剩 ${hours}:${String(minutes).padStart(2, "0")}`;
+}

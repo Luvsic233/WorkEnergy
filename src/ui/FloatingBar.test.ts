@@ -30,7 +30,7 @@ describe("FloatingBar：默认主题的扁横条一个字都没变", () => {
     expect(html).not.toContain("bar-photo-art");
     expect(html).not.toContain("bar-photo-main");
     // 标签 + 数字 + 脚注（阶段 + 薪资 hint）都在
-    expect(html).toContain("今日实时工资");
+    expect(html).toContain("今日老板欠我");
     expect(html).toContain('data-decimals="18"');
     expect(html).toContain('class="bar-foot"');
     expect(html).toContain("元 / 21.75 天 / 8 小时");
@@ -60,7 +60,7 @@ describe("FloatingBar：photo-left 版式（内置耄耋猫）", () => {
     expect(html).toContain("bar-photo-img");
     expect(html).toContain('class="bar-photo-main"');
     // 右侧三块：标签 / 数字区 / 阶段
-    expect(html).toContain("今日实时工资");
+    expect(html).toContain("今日老板欠我");
     expect(html).toContain('data-decimals="18"');
     expect(html).toContain('class="phase"');
     // photo-left 版式里没有薪资 hint（右侧只放标签 + 金额 + 阶段）

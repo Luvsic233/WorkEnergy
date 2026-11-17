@@ -569,34 +569,35 @@ body {
   z-index: 2;
   left: calc(22px * var(--bar-scale));
   right: calc(22px * var(--bar-scale));
-  bottom: calc(6px * var(--bar-scale));
-  height: 3px;
+  bottom: calc(5px * var(--bar-scale));
+  /* 6px 高：轨道 4px + 圆点 6px，比原来的 3px 明显得多，但仍然绝对定位、不参与布局。 */
+  height: 6px;
   pointer-events: none;
 }
 
 /* 午休那段"浅色缺口"：一层很淡的底色块（缺口本身是轨道在那里断开）。 */
+/* 午休缺口：用卡片底色把轨道与填充一起「挖断」，看上去像时间跳过了一段。 */
 .bar-timeline::before {
   content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: calc(1px * var(--bar-scale));
+  height: calc(4px * var(--bar-scale));
   left: var(--lunch-from, 0%);
   width: calc(var(--lunch-to, 0%) - var(--lunch-from, 0%));
-  border-radius: 1px;
-  background: var(--theme-label, rgba(226, 232, 240, 0.55));
-  opacity: 0.14;
+  border-radius: 999px;
+  background: var(--theme-bar-bg, rgba(14, 16, 22, 0.62));
+  z-index: 2;
 }
 
-/* 轨道：2px 细线（整个时间轴的视觉高度仍是 3px）；午休缺口用同一段渐变"挖掉"
-   （--lunch-from / --lunch-to 由 React 写进 style，午休关闭时两者都是 0%，缺口自然消失）。 */
+/* 轨道：4px 圆头，比原来的 2px 粗一倍，明确是一条进度条而不是装饰线。 */
 .bar-timeline-rail {
   position: absolute;
   left: 0;
   right: 0;
-  top: 1px;
-  height: 2px;
-  border-radius: 1px;
-  opacity: 0.5;
+  top: calc(1px * var(--bar-scale));
+  height: calc(4px * var(--bar-scale));
+  border-radius: 999px;
+  opacity: 0.32;
   background-image: linear-gradient(
     to right,
     var(--theme-hint, rgba(226, 232, 240, 0.45)) 0 var(--lunch-from, 0%),
@@ -605,17 +606,30 @@ body {
   );
 }
 
-/* 当前位置：3px 圆点，居中压在轨道上（margin-left 抵掉自身一半宽度）。 */
+/* 已经过去的那一段：实色填充，宽度每帧由 ticker 写入 style.width（零 setState）。 */
+.bar-timeline-fill {
+  position: absolute;
+  left: 0;
+  top: calc(1px * var(--bar-scale));
+  width: 0;
+  height: calc(4px * var(--bar-scale));
+  border-radius: 999px;
+  background: var(--theme-frac, rgba(160, 220, 255, 0.92));
+  opacity: 0.9;
+}
+
+/* 当前位置：6px 圆点 + 一圈卡片底色描边，压在任何背景上都看得清。 */
 .bar-timeline-dot {
   position: absolute;
   top: 0;
   left: 0;
-  width: 3px;
-  height: 3px;
-  margin-left: -1.5px;
+  width: calc(6px * var(--bar-scale));
+  height: calc(6px * var(--bar-scale));
+  margin-left: calc(-3px * var(--bar-scale));
   border-radius: 999px;
   background: var(--theme-int, #f2f4f8);
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 0 0 calc(2px * var(--bar-scale)) var(--theme-bar-bg, rgba(14, 16, 22, 0.62));
+  z-index: 3;
 }
 
 /*

@@ -40,7 +40,7 @@ import {
   sentIdsOn,
   writeNotifyState,
 } from "../theme/proactive";
-import { lunchRatiosOf, timelineGeometry } from "../theme/timeline";
+import { lunchRatiosOf, timelineGeometry , remainingLabel } from "../theme/timeline";
 import { MascotImage } from "../theme/MascotImage";
 import { PhotoArt } from "../theme/PhotoArt";
 import { layoutOf } from "../theme/layout";
@@ -258,6 +258,7 @@ export function FloatingBar({
   // 底部时间轴：只写 dot 的 style.left 与两个 data-*，一帧都没有 setState。
   const timelineRef = useRef<HTMLDivElement>(null);
   const dotRef = useRef<HTMLSpanElement>(null);
+  const fillRef = useRef<HTMLSpanElement>(null);
   const timelineMarkRef = useRef("");
   // 主动气泡的判定基线：checkedAt 是上一次判定的时刻（null = 刚启动，这一轮只建立基线）。
   const proactiveRef = useRef<{ checkedAt: number | null; interactionAt: number | null | undefined }>({
@@ -423,9 +424,13 @@ export function FloatingBar({
           if (intRef.current) intRef.current.textContent = money.int;
           if (fracRef.current) fracRef.current.textContent = money.frac;
         }
-        if (phase !== lastPhase) {
-          lastPhase = phase;
-          if (phaseRef.current) phaseRef.current.textContent = phase;
+        // 阶段文字带上剩余时间（「在岗 · 剩 3:12」）：时间轴只有一条线不容易看懂，这行字把它解释清楚。
+        // 整串变了才写 DOM（每分钟一次，不是每帧）。
+        const rest = remainingLabel(settings, nowMs);
+        const phaseText = rest === null ? phase : `${phase} · ${rest}`;
+        if (phaseText !== lastPhase) {
+          lastPhase = phaseText;
+          if (phaseRef.current) phaseRef.current.textContent = phaseText;
         }
         // 吉祥物：只把整数元文本与阶段交给状态机，滚轮与引擎一行没动。
         mascotNotify(money.int, phase);
@@ -436,6 +441,7 @@ export function FloatingBar({
         // 底部时间轴：纯几何，只写圆点的 style.left 与两个 data-*（值没变就不碰 DOM）。
         const geometry = timelineGeometry(settings, nowMs);
         if (dotRef.current) dotRef.current.style.left = `${(geometry.progress * 100).toFixed(2)}%`;
+        if (fillRef.current) fillRef.current.style.width = `${(geometry.progress * 100).toFixed(2)}%`;
         const timeline = timelineRef.current;
         if (timeline !== null) {
           const overtime = phase === "加班";
@@ -516,6 +522,7 @@ export function FloatingBar({
   const timelineBlock = (
     <div className="bar-timeline" ref={timelineRef} style={timelineStyle} data-state="working" aria-hidden="true">
       <span className="bar-timeline-rail" />
+        <span className="bar-timeline-fill" ref={fillRef} />
       <span className="bar-timeline-dot" ref={dotRef} />
     </div>
   );
@@ -535,7 +542,7 @@ export function FloatingBar({
           {closeButton}
           <PhotoArt state={mascot.state} />
           <div className="bar-photo-main" ref={mainRef}>
-            <div className="bar-label">今日实时工资</div>
+            <div className="bar-label">今日老板欠我</div>
             {valueBlock}
             <div className="bar-foot">{phaseBlock}</div>
           </div>
@@ -550,7 +557,7 @@ export function FloatingBar({
     <div {...barHostProps}>
       <div ref={barRef} className="bar">
         {closeButton}
-        <div className="bar-label">今日实时工资</div>
+        <div className="bar-label">今日老板欠我</div>
         {valueBlock}
         <div className="bar-foot">
           {phaseBlock}
