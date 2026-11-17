@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_THEMES, DEFAULT_THEME_ID, builtinTheme } from "./builtin";
+import { BUILTIN_THEMES, CLASSIC_THEME_ID, builtinTheme } from "./builtin";
 import { THEME_VARIABLES, applyTheme, themeCssVariables, type StyleTarget } from "./css";
 import { DEFAULT_COLORS } from "./parse";
 import type { Theme } from "./types";
@@ -26,7 +26,7 @@ function themeOf(id: string): Theme {
 
 describe("主题 → CSS 变量", () => {
   it("maps every colour key plus the font to a --theme-* variable", () => {
-    const variables = themeCssVariables(themeOf(DEFAULT_THEME_ID));
+    const variables = themeCssVariables(themeOf(CLASSIC_THEME_ID));
 
     expect(Object.keys(variables)).toEqual([...THEME_VARIABLES]);
     expect(variables["--theme-bar-bg"]).toBe(DEFAULT_COLORS.bar);
@@ -34,7 +34,7 @@ describe("主题 → CSS 变量", () => {
     expect(variables["--theme-frac"]).toBe(DEFAULT_COLORS.frac);
     expect(variables["--theme-phase"]).toBe(DEFAULT_COLORS.phase);
     expect(variables["--theme-hint"]).toBe(DEFAULT_COLORS.hint);
-    expect(variables["--theme-font"]).toBe(themeOf(DEFAULT_THEME_ID).font);
+    expect(variables["--theme-font"]).toBe(themeOf(CLASSIC_THEME_ID).font);
   });
 
   it("writes the minimal values after switching, then restores the default ones", () => {
@@ -47,7 +47,7 @@ describe("主题 → CSS 变量", () => {
     expect(style.values.get("--theme-int")).toBe("#111827");
     expect(style.values.get("--theme-frac")).toBe("#6b7280");
 
-    applyTheme(themeOf(DEFAULT_THEME_ID), style);
+    applyTheme(themeOf(CLASSIC_THEME_ID), style);
     expect(style.values.get("--theme-bar-bg")).toBe(DEFAULT_COLORS.bar);
     expect(style.values.get("--theme-int")).toBe(DEFAULT_COLORS.int);
   });

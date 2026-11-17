@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_THEMES, BUILTIN_THEME_SOURCES, DEFAULT_THEME_ID, builtinTheme } from "./builtin";
+import {
+  BUILTIN_THEMES,
+  BUILTIN_THEME_SOURCES,
+  CLASSIC_THEME_ID,
+  DEFAULT_THEME_ID,
+  MAODIE_THEME_ID,
+  builtinTheme,
+} from "./builtin";
 import { DEFAULT_COLORS, DEFAULT_FONT, isSafeColor, isSafeImageFile, parseTheme } from "./parse";
 
 const META = { id: "user:maodie", source: "user" as const, dirName: "maodie", baseDir: "C:/themes/maodie" };
@@ -143,10 +150,15 @@ describe("内置主题解析", () => {
     }
   });
 
-  it("keeps the default theme identical to the shipped dark look", () => {
-    const dark = builtinTheme(DEFAULT_THEME_ID);
+  it("keeps the classic dark theme identical to the shipped look", () => {
+    const dark = builtinTheme(CLASSIC_THEME_ID);
     expect(dark?.colors).toEqual(DEFAULT_COLORS);
     expect(dark?.mascot).toBeNull();
+  });
+
+  it("defaults to the maodie theme on a fresh install", () => {
+    expect(DEFAULT_THEME_ID).toBe(MAODIE_THEME_ID);
+    expect(builtinTheme(DEFAULT_THEME_ID)?.mascot).not.toBeNull();
   });
 
   it("ships a minimal theme that is light and has no mascot", () => {

@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_INPUT, type RawInput } from "../core/settings";
+import { CLASSIC_THEME_ID } from "../theme/builtin";
 import { SettingsPanel } from "./SettingsPanel";
 
 const adapter = { load: async () => null, save: async () => undefined };
@@ -13,6 +14,7 @@ function render(initial: RawInput = DEFAULT_INPUT): string {
       open: true,
       initial,
       adapter,
+      themeId: CLASSIC_THEME_ID,
       onClose: () => undefined,
       onSaved: () => undefined,
     }),

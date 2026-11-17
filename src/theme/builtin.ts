@@ -8,10 +8,13 @@ import { DEFAULT_FONT, parseTheme } from "./parse";
 import type { BarLayout, Theme, ThemeWindow } from "./types";
 
 /** 默认主题 id：找不到已保存的主题时用它，也是首次启动的外观。 */
-export const DEFAULT_THEME_ID = "default";
+export const DEFAULT_THEME_ID = "maodie";
 
 /** 内置「耄耋猫」主题 id：photo-left 版式 + 固定 340x96 窗口。 */
 export const MAODIE_THEME_ID = "maodie";
+
+/** 内置「深色（默认）」主题 id：老版本的外观，现在只是候选之一。 */
+export const CLASSIC_THEME_ID = "default";
 
 /** 内置 maodie 的窗口尺寸（与 FloatingBar 的 photo-left 版式配套，写死在这里）。 */
 export const MAODIE_WINDOW: ThemeWindow = { width: 340, height: 96 };
@@ -35,7 +38,7 @@ interface BuiltinSource {
  */
 export const BUILTIN_THEME_SOURCES: readonly BuiltinSource[] = [
   {
-    id: DEFAULT_THEME_ID,
+    id: CLASSIC_THEME_ID,
     json: {
       name: "深色（默认）",
       colors: {
