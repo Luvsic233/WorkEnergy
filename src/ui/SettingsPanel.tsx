@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatAtoms } from "../core/format";
+import { OVERTIME_PAY_MODES } from "../core/earning";
 import {
   DECIMALS_OPTIONS,
   DEFAULT_INPUT,
   DISPLAY_MODE_OPTIONS,
   hourlyAtoms,
+  OVERTIME_PAY_SPECS,
   REFRESH_HZ_OPTIONS,
   sizePresetSpec,
   SIZE_PRESET_OPTIONS,
@@ -146,6 +148,8 @@ export function SettingsPanel({
    */
   const activeTheme = themes.find((candidate) => candidate.id === themeId) ?? null;
   const fixedWindow = windowSizeOf(activeTheme);
+  /** 当前加班计薪档位的文案与它绑定的输入字段。 */
+  const overtimeSpec = OVERTIME_PAY_SPECS[draft.overtimePayMode] ?? OVERTIME_PAY_SPECS.multiplier;
 
   if (!open) return null;
 
@@ -234,6 +238,43 @@ export function SettingsPanel({
           }
           format={(option) => sizePresetSpec(option).label}
           onChange={(value) => update("sizePreset", value)}
+        />
+      </div>
+
+      {/*
+        加班这一块单独成组，并且从「高级」里搬了出来：它每天都在影响那行数字，
+        不该藏在二级折叠里。开关 + 三选一 + 一个数值，数值输入跟着模式换标签，
+        每一档各自记住自己的数（切回来还是上次填的那个）。
+      */}
+      <div className="settings-overtime">
+        <label className="settings-switch">
+          <input
+            type="checkbox"
+            checked={draft.overtimeMode}
+            onChange={(event) => update("overtimeMode", event.currentTarget.checked)}
+          />
+          加班模式（下班后继续累计；右键菜单里也能一键切换）
+        </label>
+        <Choice
+          label="加班计薪"
+          options={OVERTIME_PAY_MODES}
+          value={draft.overtimePayMode}
+          error={errors.overtimePayMode}
+          // 不置灰：加班模式关着的时候也可以先把这一档配好，写清楚"暂不生效"就够，
+          // 不必让用户为了填一个数先去开开关。
+          hint={
+            draft.overtimeMode
+              ? overtimeSpec.hint
+              : `${overtimeSpec.hint}（加班模式未开启，这一档暂不生效）`
+          }
+          format={(option) => OVERTIME_PAY_SPECS[option].label}
+          onChange={(value) => update("overtimePayMode", value)}
+        />
+        <Field
+          label={overtimeSpec.valueLabel}
+          value={draft[overtimeSpec.field]}
+          error={errors[overtimeSpec.field]}
+          onChange={(value) => update(overtimeSpec.field, value)}
         />
       </div>
 
@@ -330,14 +371,6 @@ export function SettingsPanel({
               />
             </div>
           ) : null}
-          <label className="settings-switch">
-            <input
-              type="checkbox"
-              checked={draft.overtimeMode}
-              onChange={(event) => update("overtimeMode", event.currentTarget.checked)}
-            />
-            加班模式（下班后继续累计）
-          </label>
         </div>
       ) : null}
 

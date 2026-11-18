@@ -24,9 +24,12 @@ fn hide_settings(app: AppHandle) {
 
 /// Pops the native context menu at the cursor position. Async on purpose: the
 /// menu is modal on the main thread and must not block the IPC handler.
+///
+/// overtime_mode：前端（localStorage 是唯一真相）在弹出这一瞬间顺带把「加班模式」交过来，
+/// 菜单的勾选状态因此永远和页面里的一致 —— 原生侧不自己保存状态，也就不会漂移。
 #[tauri::command]
-async fn show_bar_menu(app: AppHandle) -> Result<(), String> {
-    bar_menu::show(&app).map_err(|error| error.to_string())
+async fn show_bar_menu(app: AppHandle, overtime_mode: Option<bool>) -> Result<(), String> {
+    bar_menu::show(&app, overtime_mode).map_err(|error| error.to_string())
 }
 
 /// 跨过一个 20 元整数倍时弹一次庆祝窗（label=celebrate，200x200，不抢焦点）。

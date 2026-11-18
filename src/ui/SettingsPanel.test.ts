@@ -120,3 +120,69 @@ describe("SettingsPanel：显示相关三组控件", () => {
     }
   });
 });
+
+describe("SettingsPanel：加班计薪三选一 + 一个数值", () => {
+  it("offers the three modes in one group with multiplier active by default", () => {
+    const group = groupOf(render(), "加班计薪");
+    expect(group).toContain(">倍数<");
+    expect(group).toContain(">固定时薪<");
+    expect(group).toContain(">固定总额<");
+    expect(group).toMatch(/aria-pressed="true"[^>]*>倍数</);
+  });
+
+  it("marks whichever mode is stored as the active one", () => {
+    expect(groupOf(render({ ...DEFAULT_INPUT, overtimePayMode: "fixedHourly" }), "加班计薪")).toMatch(
+      /aria-pressed="true"[^>]*>固定时薪</,
+    );
+    expect(groupOf(render({ ...DEFAULT_INPUT, overtimePayMode: "fixedTotal" }), "加班计薪")).toMatch(
+      /aria-pressed="true"[^>]*>固定总额</,
+    );
+  });
+
+  it("relabels the single number input with the active mode's unit", () => {
+    expect(render()).toContain('settings-field-label">倍数<');
+    expect(render({ ...DEFAULT_INPUT, overtimePayMode: "fixedHourly" })).toContain('settings-field-label">元每小时<');
+    expect(render({ ...DEFAULT_INPUT, overtimePayMode: "fixedTotal" })).toContain('settings-field-label">元每次<');
+  });
+
+  it("shows the number that belongs to the active mode, not the other two", () => {
+    const html = render({ ...DEFAULT_INPUT, overtimePayMode: "fixedTotal", overtimeFixedTotal: "888" });
+    expect(html).toContain('value="888"');
+    expect(html).toContain('settings-field-label">元每次<');
+    // 倍数制下的 1.5 不会跑到固定总额的输入框里
+    expect(html).not.toContain('value="1.5"');
+  });
+
+  it("stays editable while the overtime switch is off, and says it does not bite yet", () => {
+    const off = render();
+    expect(groupOf(off, "加班计薪")).not.toContain("disabled");
+    expect(off).toContain("（加班模式未开启，这一档暂不生效）");
+
+    const on = render({ ...DEFAULT_INPUT, overtimeMode: true });
+    expect(on).not.toContain("（加班模式未开启，这一档暂不生效）");
+    expect(on).toContain("加班时薪 = 正常时薪 × 倍数（1.0–5.0，步长 0.1）；1.0 等于完全不加成。");
+  });
+
+  it("explains each mode in place", () => {
+    expect(render({ ...DEFAULT_INPUT, overtimeMode: true, overtimePayMode: "fixedHourly" })).toContain(
+      "加班时段每小时固定这么多钱，与月薪无关；正常工作时段仍按上面的月薪换算。",
+    );
+    expect(render({ ...DEFAULT_INPUT, overtimeMode: true, overtimePayMode: "fixedTotal" })).toContain(
+      "下班那一刻一次性到账这个金额（与加班多久无关），之后的加班时段仍按正常时薪继续累计。",
+    );
+  });
+
+  it("flags a bad number in place, right next to the input", () => {
+    const outOfStep = render({ ...DEFAULT_INPUT, overtimeMultiplier: "1.55" });
+    expect(outOfStep).toContain("倍数步长为 0.1（例如 1.5）");
+    expect(outOfStep).toContain("settings-input is-invalid");
+
+    expect(render({ ...DEFAULT_INPUT, overtimeMultiplier: "9" })).toContain("倍数必须在 1.0–5.0 之间");
+    expect(render({ ...DEFAULT_INPUT, overtimePayMode: "fixedHourly", overtimeFixedHourly: "0" })).toContain(
+      "元每小时必须大于 0",
+    );
+    expect(render({ ...DEFAULT_INPUT, overtimePayMode: "fixedTotal", overtimeFixedTotal: "-1" })).toContain(
+      "元每次必须是数字（最多 12 位整数、6 位小数）",
+    );
+  });
+});

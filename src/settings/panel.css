@@ -213,7 +213,9 @@
 }
 
 /* 显示档位：小数位数 18/12/6、跳动频率 60/10/1Hz，复用面板既有的深色卡片语汇。 */
-.settings-display {
+.settings-display,
+/* 加班计薪：开关 + 三选一 + 一个数值，与显示档位共用同一张卡片。 */
+.settings-overtime {
   display: flex;
   flex-direction: column;
   gap: 8px;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ATOMS_PER_YUAN, earnedAtoms, parseSettings } from "./earning";
+import { ATOMS_PER_YUAN, earnedAtoms, OVERTIME_PAY_MODES, paidMsOf, parseSettings } from "./earning";
 import { formatAtoms, type Decimals } from "./format";
 import {
   DECIMALS_OPTIONS,
@@ -8,6 +8,7 @@ import {
   DISPLAY_MODE_OPTIONS,
   hourlyAtoms,
   ONE_HOUR_MS,
+  OVERTIME_PAY_SPECS,
   REFRESH_HZ_OPTIONS,
   SIZE_PRESET_OPTIONS,
   SIZE_PRESETS,
@@ -32,6 +33,10 @@ describe("DEFAULT_INPUT", () => {
       lunchStart: "12:00",
       lunchEnd: "13:00",
       overtimeMode: false,
+      overtimePayMode: "multiplier",
+      overtimeMultiplier: "1.5",
+      overtimeFixedHourly: "60",
+      overtimeFixedTotal: "200",
       decimals: 18,
       refreshHz: 10,
       displayMode: "roll",
@@ -260,6 +265,7 @@ describe("display tiers: decimals + refreshHz", () => {
       "hoursMicro",
       "lunchEndMin",
       "lunchStartMin",
+      "overtime",
       "overtimeMode",
       "payDaysMicro",
       "salaryMicro",
@@ -349,11 +355,136 @@ describe("窗口尺寸三档：逻辑像素 + 内容缩放系数", () => {
       "hoursMicro",
       "lunchEndMin",
       "lunchStartMin",
+      "overtime",
       "overtimeMode",
       "payDaysMicro",
       "salaryMicro",
       "workEndMin",
       "workStartMin",
     ]);
+  });
+});
+
+describe("加班计薪：三种方式 + 一个数值", () => {
+  it("offers the three modes in panel order, multiplier first as the default", () => {
+    expect(OVERTIME_PAY_MODES).toEqual(["multiplier", "fixedHourly", "fixedTotal"]);
+    expect(DEFAULT_INPUT.overtimePayMode).toBe("multiplier");
+    expect(DEFAULT_INPUT.overtimeMultiplier).toBe("1.5");
+    expect(OVERTIME_PAY_SPECS.multiplier.valueLabel).toBe("倍数");
+    expect(OVERTIME_PAY_SPECS.fixedHourly.valueLabel).toBe("元每小时");
+    expect(OVERTIME_PAY_SPECS.fixedTotal.valueLabel).toBe("元每次");
+  });
+
+  it("carries only the active mode's number into the earning contract", () => {
+    const multiplier = toSettings({ ...DEFAULT_INPUT, overtimeMode: true });
+    expect(multiplier.overtime).toEqual({ mode: "multiplier", valueMicro: 1_500_000n });
+
+    const hourly = toSettings({ ...DEFAULT_INPUT, overtimeMode: true, overtimePayMode: "fixedHourly" });
+    expect(hourly.overtime).toEqual({ mode: "fixedHourly", valueMicro: 60_000_000n });
+
+    const total = toSettings({ ...DEFAULT_INPUT, overtimeMode: true, overtimePayMode: "fixedTotal" });
+    expect(total.overtime).toEqual({ mode: "fixedTotal", valueMicro: 200_000_000n });
+  });
+
+  it("keeps each mode's own number, so switching back and forth never rewrites it", () => {
+    const edited = { ...DEFAULT_INPUT, overtimeMultiplier: "2.4", overtimeFixedHourly: "88", overtimeFixedTotal: "500" };
+    expect(toSettings({ ...edited, overtimePayMode: "multiplier" }).overtime?.valueMicro).toBe(2_400_000n);
+    expect(toSettings({ ...edited, overtimePayMode: "fixedHourly" }).overtime?.valueMicro).toBe(88_000_000n);
+    expect(toSettings({ ...edited, overtimePayMode: "fixedTotal" }).overtime?.valueMicro).toBe(500_000_000n);
+  });
+
+  it("changes the amount immediately once the mode changes (today's history is recomputed, not migrated)", () => {
+    const at19 = new Date(2026, 0, 6, 19, 0, 0, 0).getTime();
+    const paidMs = (settings: ReturnType<typeof toSettings>) => earnedAtoms(settings, paidMsOf(settings, at19));
+    const multiplier = toSettings({ ...DEFAULT_INPUT, overtimeMode: true });
+    const hourly = toSettings({ ...DEFAULT_INPUT, overtimeMode: true, overtimePayMode: "fixedHourly" });
+    expect(paidMs(hourly)).not.toBe(paidMs(multiplier));
+    // 切回倍数制：与切换前逐原子相同（没有历史迁移，纯重算）
+    expect(paidMs(toSettings({ ...DEFAULT_INPUT, overtimeMode: true }))).toBe(paidMs(multiplier));
+  });
+
+  it("accepts the multiplier range 1.0 – 5.0 in 0.1 steps", () => {
+    const expected: Record<string, bigint> = {
+      "1.0": 1_000_000n,
+      "1.5": 1_500_000n,
+      "2": 2_000_000n,
+      "2.9": 2_900_000n,
+      "5": 5_000_000n,
+      "5.0": 5_000_000n,
+    };
+    for (const [value, micro] of Object.entries(expected)) {
+      const result = validateInput({ ...DEFAULT_INPUT, overtimeMultiplier: value });
+      expect(result.errors).toEqual({});
+      expect(result.settings?.overtime).toEqual({ mode: "multiplier", valueMicro: micro });
+    }
+  });
+
+  it("rejects a multiplier outside 1.0 – 5.0 or off the 0.1 step", () => {
+    for (const value of ["0.9", "5.1", "6"]) {
+      const result = validateInput({ ...DEFAULT_INPUT, overtimeMultiplier: value });
+      expect(result.errors.overtimeMultiplier).toBe("倍数必须在 1.0–5.0 之间");
+      expect(result.settings).toBeNull();
+    }
+    // 0 先撞上「必须大于 0」这条更早就成立的说法
+    expect(validateInput({ ...DEFAULT_INPUT, overtimeMultiplier: "0" }).errors.overtimeMultiplier).toBe(
+      "倍数必须大于 0",
+    );
+    for (const value of ["1.55", "1.25"]) {
+      expect(validateInput({ ...DEFAULT_INPUT, overtimeMultiplier: value }).errors.overtimeMultiplier).toBe(
+        "倍数步长为 0.1（例如 1.5）",
+      );
+    }
+    expect(validateInput({ ...DEFAULT_INPUT, overtimeMultiplier: "" }).errors.overtimeMultiplier).toBe("倍数不能为空");
+    expect(validateInput({ ...DEFAULT_INPUT, overtimeMultiplier: "abc" }).errors.overtimeMultiplier).toBe(
+      "倍数必须是数字（最多 12 位整数、6 位小数）",
+    );
+  });
+
+  it("rejects a fixed hourly rate or a fixed total of zero / negative / junk", () => {
+    for (const bad of ["0", "0.000000"]) {
+      expect(
+        validateInput({ ...DEFAULT_INPUT, overtimePayMode: "fixedHourly", overtimeFixedHourly: bad }).errors
+          .overtimeFixedHourly,
+      ).toBe("元每小时必须大于 0");
+      expect(
+        validateInput({ ...DEFAULT_INPUT, overtimePayMode: "fixedTotal", overtimeFixedTotal: bad }).errors
+          .overtimeFixedTotal,
+      ).toBe("元每次必须大于 0");
+    }
+    for (const bad of ["-1", "-0.5"]) {
+      expect(
+        validateInput({ ...DEFAULT_INPUT, overtimePayMode: "fixedHourly", overtimeFixedHourly: bad }).errors
+          .overtimeFixedHourly,
+      ).toBe("元每小时必须是数字（最多 12 位整数、6 位小数）");
+    }
+    expect(
+      validateInput({ ...DEFAULT_INPUT, overtimePayMode: "fixedTotal", overtimeFixedTotal: "nope" }).errors
+        .overtimeFixedTotal,
+    ).toBe("元每次必须是数字（最多 12 位整数、6 位小数）");
+  });
+
+  it("only validates the number the active mode actually uses", () => {
+    // 当前是倍数制：另外两档就算留着垃圾文本，也不该拦住保存
+    const junk = { ...DEFAULT_INPUT, overtimeFixedHourly: "", overtimeFixedTotal: "nope" };
+    expect(validateInput(junk).errors).toEqual({});
+    // 切到固定时薪：那一个坏值立刻就地报错
+    expect(validateInput({ ...junk, overtimePayMode: "fixedHourly" }).errors).toEqual({
+      overtimeFixedHourly: "元每小时不能为空",
+    });
+  });
+
+  it("rejects a pay mode the panel never offers", () => {
+    const result = validateInput({ ...DEFAULT_INPUT, overtimePayMode: "percent" as unknown as RawInput["overtimePayMode"] });
+    expect(result.errors.overtimePayMode).toBe("加班计薪只能是 multiplier / fixedHourly / fixedTotal");
+    expect(result.settings).toBeNull();
+  });
+
+  it("reports a broken pay mode next to the other broken fields", () => {
+    const broken: RawInput = {
+      ...DEFAULT_INPUT,
+      salary: "0",
+      overtimePayMode: "percent" as unknown as RawInput["overtimePayMode"],
+    };
+    expect(Object.keys(validateInput(broken).errors).sort()).toEqual(["overtimePayMode", "salary"]);
   });
 });

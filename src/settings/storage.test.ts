@@ -5,6 +5,7 @@ import {
   localStorageAdapter,
   normalizeRawInput,
   parseStored,
+  readStoredOvertimeMode,
   readStoredSizePreset,
   STORAGE_KEY,
   type KeyValueStore,
@@ -191,5 +192,81 @@ describe("storage of the window size preset", () => {
   it("reads the preset synchronously at startup, degrading to compact without storage", () => {
     // node 环境没有 localStorage：同步读必须回落默认档而不是抛错
     expect(readStoredSizePreset()).toBe("compact");
+  });
+});
+
+describe("storage of the overtime pay modes", () => {
+  it("round-trips the mode and all three numbers through the store", async () => {
+    const store = memoryStore();
+    const adapter = createAdapter(() => store);
+    const saved = {
+      ...DEFAULT_INPUT,
+      overtimeMode: true,
+      overtimePayMode: "fixedHourly" as const,
+      overtimeMultiplier: "2.2",
+      overtimeFixedHourly: "88",
+      overtimeFixedTotal: "500",
+    };
+
+    await adapter.save(saved);
+
+    expect(JSON.parse(store.data.get(STORAGE_KEY) as string)).toMatchObject({
+      overtimePayMode: "fixedHourly",
+      overtimeMultiplier: "2.2",
+      overtimeFixedHourly: "88",
+      overtimeFixedTotal: "500",
+    });
+    expect(await adapter.load()).toEqual(saved);
+  });
+
+  it("falls back to multiplier / 1.5 for a legacy record without the new fields", async () => {
+    const store = memoryStore();
+    store.data.set(STORAGE_KEY, JSON.stringify({ salary: "15000" }));
+
+    const loaded = await createAdapter(() => store).load();
+    expect(loaded?.overtimePayMode).toBe("multiplier");
+    expect(loaded?.overtimeMultiplier).toBe("1.5");
+    expect(loaded?.overtimeFixedHourly).toBe("60");
+    expect(loaded?.overtimeFixedTotal).toBe("200");
+  });
+
+  it("rejects a stored pay mode the panel never offers", () => {
+    for (const bad of ["percent", "MULTIPLIER", "", 1, true, null]) {
+      expect(normalizeRawInput({ overtimePayMode: bad })).toMatchObject({ overtimePayMode: "multiplier" });
+    }
+    expect(parseStored(JSON.stringify({ overtimePayMode: "fixedTotal" }))).toMatchObject({
+      overtimePayMode: "fixedTotal",
+    });
+    expect(parseStored(JSON.stringify({ overtimePayMode: "overtime" }))).toMatchObject({
+      overtimePayMode: "multiplier",
+    });
+  });
+
+  it("falls back to the default text for numbers or junk in the three value fields", () => {
+    const loaded = normalizeRawInput({ overtimeMultiplier: 2, overtimeFixedHourly: null, overtimeFixedTotal: {} });
+    expect(loaded).toMatchObject({
+      overtimeMultiplier: "1.5",
+      overtimeFixedHourly: "60",
+      overtimeFixedTotal: "200",
+    });
+  });
+
+  it("reads the overtime switch synchronously for the native right-click menu", () => {
+    // node 环境没有 localStorage：同步读必须回落默认（关）而不是抛错
+    expect(readStoredOvertimeMode()).toBe(false);
+
+    const store = memoryStore();
+    (globalThis as { localStorage?: unknown }).localStorage = store;
+    try {
+      expect(readStoredOvertimeMode()).toBe(false);
+      store.data.set(STORAGE_KEY, JSON.stringify({ ...DEFAULT_INPUT, overtimeMode: true }));
+      expect(readStoredOvertimeMode()).toBe(true);
+      store.data.set(STORAGE_KEY, "{not json");
+      expect(readStoredOvertimeMode()).toBe(false);
+      store.data.set(STORAGE_KEY, JSON.stringify({ salary: "15000" }));
+      expect(readStoredOvertimeMode()).toBe(false);
+    } finally {
+      delete (globalThis as { localStorage?: unknown }).localStorage;
+    }
   });
 });

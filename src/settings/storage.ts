@@ -9,6 +9,7 @@ import {
   type RefreshHz,
   type SizePreset,
 } from "../core/settings";
+import { OVERTIME_PAY_MODES, type OvertimePayMode } from "../core/earning";
 import type { Decimals } from "../core/format";
 
 /** 外壳波次（Tauri store / Neutralino storage）只需替换这个适配器的实现。 */
@@ -66,6 +67,15 @@ export function normalizeRawInput(value: unknown): RawInput | null {
     lunchStart: text(record, "lunchStart", DEFAULT_INPUT.lunchStart),
     lunchEnd: text(record, "lunchEnd", DEFAULT_INPUT.lunchEnd),
     overtimeMode: flag(record, "overtimeMode", DEFAULT_INPUT.overtimeMode),
+    overtimePayMode: option<OvertimePayMode>(
+      record,
+      "overtimePayMode",
+      OVERTIME_PAY_MODES,
+      DEFAULT_INPUT.overtimePayMode,
+    ),
+    overtimeMultiplier: text(record, "overtimeMultiplier", DEFAULT_INPUT.overtimeMultiplier),
+    overtimeFixedHourly: text(record, "overtimeFixedHourly", DEFAULT_INPUT.overtimeFixedHourly),
+    overtimeFixedTotal: text(record, "overtimeFixedTotal", DEFAULT_INPUT.overtimeFixedTotal),
     decimals: option<Decimals>(record, "decimals", DECIMALS_OPTIONS, DEFAULT_INPUT.decimals),
     refreshHz: option<RefreshHz>(record, "refreshHz", REFRESH_HZ_OPTIONS, DEFAULT_INPUT.refreshHz),
     displayMode: option<DisplayMode>(record, "displayMode", DISPLAY_MODE_OPTIONS, DEFAULT_INPUT.displayMode),
@@ -109,6 +119,16 @@ export const localStorageAdapter: StorageAdapter = createAdapter(browserStore);
  * 同步读窗口尺寸档位：首帧前就要把字号与窗口调到目标档，等不到 async 适配器。
  * 没有存储 / 记录损坏 / 档位非法时一律回落默认档（compact），保证起步就是最小排版。
  */
+/**
+ * 同步读「加班模式」开关：右键菜单弹出时要把勾选状态交给原生侧，等不到 async 适配器。
+ * 没有存储 / 记录损坏时回落默认（关）。
+ */
+export function readStoredOvertimeMode(): boolean {
+  const raw = browserStore()?.getItem(STORAGE_KEY) ?? null;
+  if (raw === null) return DEFAULT_INPUT.overtimeMode;
+  return parseStored(raw)?.overtimeMode ?? DEFAULT_INPUT.overtimeMode;
+}
+
 export function readStoredSizePreset(): SizePreset {
   const raw = browserStore()?.getItem(STORAGE_KEY) ?? null;
   if (raw === null) return DEFAULT_INPUT.sizePreset;

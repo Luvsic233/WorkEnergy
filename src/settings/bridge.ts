@@ -6,6 +6,7 @@
  * 全部退化成 no-op（尺寸档位只落 CSS），前端在纯网页环境下照常渲染。
  */
 import { sizePresetSpec, type SizePreset, type SizePresetSpec } from "../core/settings";
+import { readStoredOvertimeMode } from "./storage";
 
 type InvokeFn = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 
@@ -53,12 +54,26 @@ export function isDesktop(): boolean {
   return typeof runtime()?.core?.invoke === "function";
 }
 
+/** 原生右键菜单的弹出命令：只有它需要带上「加班模式」的当前勾选状态。 */
+const BAR_MENU_COMMAND = "show_bar_menu";
+
+/**
+ * 给「弹出原生菜单」这一次调用补上加班模式的当前值。
+ *
+ * 为什么在这里补：开关的真身是 localStorage 里的 overtimeMode，而原生菜单只在弹出的那一瞬间
+ * 需要知道勾没勾 —— 主窗口与设置窗口同源，此刻读到的就是最新值，不必另造一套状态同步。
+ */
+function withMenuState(command: string, args?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (command !== BAR_MENU_COMMAND) return args;
+  return { ...args, overtimeMode: readStoredOvertimeMode() };
+}
+
 /** 调自定义命令；不在 Tauri 里或失败时静默，不影响纯网页预览。 */
 export async function invoke(command: string, args?: Record<string, unknown>): Promise<void> {
   const fn = runtime()?.core?.invoke;
   if (!fn) return;
   try {
-    await fn(command, args);
+    await fn(command, withMenuState(command, args));
   } catch {
     // 原生侧不可用（预览 / 命令被拒）时不需要打扰用户。
   }
