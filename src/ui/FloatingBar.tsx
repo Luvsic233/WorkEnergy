@@ -11,6 +11,8 @@ import {
 import type { Phase, Settings } from "../core/earning";
 import {
   DEFAULT_DECIMALS,
+  digitColumns,
+  formatAtoms,
   formatMicro,
   type Decimals,
   type DigitColumn,
@@ -44,6 +46,7 @@ import { lunchRatiosOf, timelineGeometry , remainingLabel } from "../theme/timel
 import { MascotImage } from "../theme/MascotImage";
 import { PhotoArt } from "../theme/PhotoArt";
 import { layoutOf } from "../theme/layout";
+import { advanceSlowStop, atomsOfMoney, createSlowStopState, stallDeadlineMs, type SlowStopState } from "../theme/slowStop";
 import { useAdaptiveCardWidth } from "../theme/adaptiveWidth";
 import type { Theme } from "../theme/types";
 import { useMascot } from "../theme/useMascot";
@@ -297,6 +300,11 @@ export function FloatingBar({
   const bubbleBusyUntilRef = useRef(0);
   const pendingBubbleRef = useRef<string | null>(null);
   const pendingTimerRef = useRef<number | null>(null);
+  /*
+   * 显示值状态机（减速滑停）：每帧把「显示值」向真实值平滑推进，到点时在 1.2 秒内精确落在真实值上。
+   * 它只影响滚轮 / 文本拿到的 atoms，真实值（引擎算出来的那份）一个字都不变。
+   */
+  const slowStopRef = useRef<SlowStopState>(createSlowStopState());
   // 底部时间轴：只写 dot 的 style.left 与两个 data-*，一帧都没有 setState。
   const timelineRef = useRef<HTMLDivElement>(null);
   const dotRef = useRef<HTMLSpanElement>(null);
@@ -487,17 +495,29 @@ export function FloatingBar({
     return startTicker(
       host,
       settings,
-      ({ money, phase, columns, nowMs }) => {
+      ({ money, phase, nowMs }) => {
+        // 显示值：真实值只读进来（money 还原成 atoms，18 位档就是引擎原值），
+        // 推进出一份平滑跟随的显示值，再交给滚轮 / 文本。真实金额本身一个字都不改。
+        slowStopRef.current = advanceSlowStop(slowStopRef.current, {
+          targetAtoms: atomsOfMoney(money, decimals),
+          nowMs,
+          deadlineMs: stallDeadlineMs(settings, nowMs),
+        });
+        const shown = slowStopRef.current.display;
         if (displayMode === "roll") {
-          // 整数：每位推到整格，数值变化时由进位状态机自己滚一格。
-          rollerRef.current?.paint(columns, nowMs);
-          // 小数：每帧都按 atoms 的真实连续进度（digit + progress）推进，没有任何门限。
-          fracRollerRef.current?.paint(columns.frac);
+          // 滚轮拿到的 atoms 换成显示值：整数每位推到整格（数值变化时自己滚一格），
+          // 小数每帧按显示值的连续进度（digit + progress）冲刺，没有任何门限。
+          const shownColumns = digitColumns(shown, decimals);
+          rollerRef.current?.paint(shownColumns, nowMs);
+          fracRollerRef.current?.paint(shownColumns.frac);
         } else {
           // jump：整数与小数一起按 refreshHz 整片跳，没有任何动画。
-          if (intRef.current) intRef.current.textContent = money.int;
-          if (fracRef.current) fracRef.current.textContent = money.frac;
+          const shownMoney = formatAtoms(shown, decimals);
+          if (intRef.current) intRef.current.textContent = shownMoney.int;
+          if (fracRef.current) fracRef.current.textContent = shownMoney.frac;
         }
+        // 下面这几条链路用的仍然是真实值 money / phase（吉祥物、庆祝、自适应宽度、主动气泡）：
+        // 显示值只在上面交给滚轮与文本，一个字都不会流进它们。
         // 阶段文字带上剩余时间（「在岗 · 剩 3:12」）：时间轴只有一条线不容易看懂，这行字把它解释清楚。
         // 整串变了才写 DOM（每分钟一次，不是每帧）。
         const rest = remainingLabel(settings, nowMs);
